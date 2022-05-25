@@ -4,6 +4,7 @@ namespace esvo_core
 {
 namespace container
 {
+int minid=0;
 DepthPoint::DepthPoint()
 {
   row_ = 0;
@@ -13,8 +14,9 @@ DepthPoint::DepthPoint()
   invDepth_ = -1.0;
   variance_ = 0.0;
   residual_ = 0.0;
-
+  dpid_=minid++;
   age_ = 0;
+  
 //  outlierProbability_ = 0.0;
 }
 
@@ -28,16 +30,19 @@ DepthPoint::DepthPoint(
   invDepth_ = -1.0;
   variance_ = 0.0;
   residual_ = 0.0;
-
+  dpid_=minid++;
   age_ = 0;
 //  outlierProbability_ = 0.0;
 }
 
 DepthPoint::~DepthPoint()
 {
-
+// vpObservation_.clear();
 }
-
+int DepthPoint::dpid() const
+{
+  return dpid_;
+}
 size_t
 DepthPoint::row() const
 {
@@ -79,6 +84,7 @@ DepthPoint::scaleSquared()
 {
   return scaleSquared_;
 }
+
 
 const double &
 DepthPoint::scaleSquared() const
@@ -199,6 +205,17 @@ DepthPoint::p_cam() const
   return p_cam_;
 }
 
+const Eigen::Vector3d &
+DepthPoint::p_world() const {
+  
+  return p_world_;
+}
+void 
+DepthPoint::update_p_world(){
+
+  p_world_ = T_world_cam_.block<3,3>(0,0) * p_cam_+T_world_cam_.block<3,1>(0,3);
+  
+}
 void
 DepthPoint::updatePose(Eigen::Matrix<double, 4, 4> &T_world_cam)
 {
@@ -242,6 +259,7 @@ DepthPoint::copy(const DepthPoint &copy)
   T_world_cam_ = copy.T_world_cam_;
   residual_ = copy.residual_;
   age_ = copy.age_;
+
 }
 
 }

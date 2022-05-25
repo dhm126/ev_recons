@@ -47,8 +47,8 @@ public:
     bool bDonwUpConfiguration);
 
   void createMatchProblem(
-    StampedTimeSurfaceObs * pStampedTsObs,
-    StampTransformationMap * pSt_map,
+    StampedTimeSurfaceObs * pStampedTsObs,//tsobs
+    StampTransformationMap * pSt_map,//transformation +timestamped
     std::vector<dvs_msgs::Event *>* pvEventsPtr);
 
   bool match_an_event(

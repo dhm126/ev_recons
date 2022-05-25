@@ -49,7 +49,7 @@ bool RegProblemSolverLM::resetRegProblem(RefFrame* ref, CurFrame* cur)
     LOG(INFO) << "resetRegProblem RESET fails for no enough events coming in.";
     LOG(INFO) << "However, the system remains to work.";
   }
-  if( ref->vPointXYZPtr_.size() < rpConfigPtr_->BATCH_SIZE_ )
+  if( ref->vPointXYZPtr_.size() < rpConfigPtr_->BATCH_SIZE_ )//ref binding wihth pclXYZ depth point
   {
     LOG(INFO) << "resetRegProblem RESET fails for no enough point cloud in the local map.";
     LOG(INFO) << "The system will be re-initialized";
@@ -58,7 +58,7 @@ bool RegProblemSolverLM::resetRegProblem(RefFrame* ref, CurFrame* cur)
   //  LOG(INFO) << "resetRegProblem RESET succeeds.";
   if(rpType_ == REG_NUMERICAL)
   {
-    numDiff_regProblemPtr_->setProblem(ref, cur, false);
+    numDiff_regProblemPtr_->setProblem(ref, cur, false);//
 //    LOG(INFO) << "numDiff_regProblemPtr_->setProblem(ref, cur, false) -----------------";
   }
   if(rpType_ == REG_ANALYTICAL)
@@ -79,7 +79,7 @@ bool RegProblemSolverLM::solve_numerical()
   lm.resetParameters();
   lm.parameters.ftol = 1e-3;
   lm.parameters.xtol = 1e-3;
-  lm.parameters.maxfev = rpConfigPtr_->MAX_ITERATION_ * 8;
+  lm.parameters.maxfev = rpConfigPtr_->MAX_ITERATION_ * 8;//h文件给的10
 
   size_t iteration = 0;
   size_t nfev = 0;
@@ -87,7 +87,7 @@ bool RegProblemSolverLM::solve_numerical()
   {
     if(iteration >= rpConfigPtr_->MAX_ITERATION_)
       break;
-    numDiff_regProblemPtr_->setStochasticSampling(
+    numDiff_regProblemPtr_->setStochasticSampling(//迭代次数 余 batches *batch 数量= offset
       (iteration % numDiff_regProblemPtr_->numBatches_) * rpConfigPtr_->BATCH_SIZE_, rpConfigPtr_->BATCH_SIZE_);
     Eigen::VectorXd x(6);
     x.fill(0.0);
@@ -98,7 +98,7 @@ bool RegProblemSolverLM::solve_numerical()
     }
 
     Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeOneStep(x);
-    numDiff_regProblemPtr_->addMotionUpdate(x);
+    numDiff_regProblemPtr_->addMotionUpdate(x);//由lm.x計算R6——>SE3群的cayley得出 R_和t_
 
     iteration++;
     nfev += lm.nfev;
@@ -115,7 +115,7 @@ bool RegProblemSolverLM::solve_numerical()
 
       // project 3D points to current frame
       Eigen::Matrix3d R_cur_ref =  numDiff_regProblemPtr_->R_.transpose();
-      Eigen::Vector3d t_cur_ref = -numDiff_regProblemPtr_->R_.transpose() * numDiff_regProblemPtr_->t_;
+      Eigen::Vector3d t_cur_ref = -numDiff_regProblemPtr_->R_.transpose() * numDiff_regProblemPtr_->t_;//t=R*t
 
       size_t numVisualization = std::min(numDiff_regProblemPtr_->ResItems_.size(), (size_t)2000);
       for(size_t i = 0; i < numVisualization; i++)
@@ -138,7 +138,7 @@ bool RegProblemSolverLM::solve_numerical()
       break;
   }
 //  LOG(INFO) << "LM Finished ...................";
-  numDiff_regProblemPtr_->setPose();
+  numDiff_regProblemPtr_->setPose();//得到相对pose传到cur_.tr_之中
   lmStatics_.nPoints_ = numDiff_regProblemPtr_->numPoints_;
   lmStatics_.nfev_ = nfev;
   lmStatics_.nIter_ = iteration;
@@ -168,8 +168,8 @@ bool RegProblemSolverLM::solve_analytical()
       LOG(ERROR) << "ImproperInputParameters for LM (Tracking)." << std::endl;
       return false;
     }
-    Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeOneStep(x);
-    regProblemPtr_->addMotionUpdate(x);
+    Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeOneStep(x);//解最小二乘法得到 x
+    regProblemPtr_->addMotionUpdate(x);//由 r6计算 SE3 R和t
 
     iteration++;
     nfev += lm.nfev;
@@ -207,7 +207,7 @@ bool RegProblemSolverLM::solve_analytical()
     sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "bgr8", reprojMap_left).toImageMsg();
     reprojMap_pub_->publish(msg);
   }
-  /*************************** Visualization ************************/
+  /***************************  end of Visualization ************************/
 
   regProblemPtr_->setPose();
   lmStatics_.nPoints_ = regProblemPtr_->numPoints_;

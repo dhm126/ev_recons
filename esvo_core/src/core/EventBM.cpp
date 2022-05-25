@@ -2,7 +2,7 @@
 #include <thread>
 #include <numeric>
 #include <Eigen/Eigenvalues>
-
+//左右目匹配
 esvo_core::core::EventBM::EventBM(
   esvo_core::CameraSystem::Ptr camSysPtr,
   size_t numThread,
@@ -53,7 +53,7 @@ void esvo_core::core::EventBM::resetParameters(
   infoNoiseRatioLowNum_ = 0;
 }
 
-void esvo_core::core::EventBM::createMatchProblem(
+void esvo_core::core::EventBM::createMatchProblem(//输入 cur_tsobs cur_st   
   StampedTimeSurfaceObs * pStampedTsObs,
   StampTransformationMap * pSt_map,
   std::vector<dvs_msgs::Event *>* pvEventsPtr)
@@ -63,7 +63,7 @@ void esvo_core::core::EventBM::createMatchProblem(
   size_t numEvents = pvEventsPtr->size();
   vEventsPtr_.clear();
   vEventsPtr_.reserve(numEvents);
-  vEventsPtr_.insert(vEventsPtr_.end(), pvEventsPtr->begin(), pvEventsPtr->end());
+  vEventsPtr_.insert(vEventsPtr_.end(), pvEventsPtr->begin(), pvEventsPtr->end());//vEvents 就上一周期收到的events
 
   if(bSmoothTS_)
   {
@@ -74,7 +74,7 @@ void esvo_core::core::EventBM::createMatchProblem(
   vpDisparitySearchBound_.clear();
   vpDisparitySearchBound_.reserve(numEvents);
   for(size_t i = 0; i < vEventsPtr_.size(); i++)
-    vpDisparitySearchBound_.push_back(std::make_pair(min_disparity_, max_disparity_));
+    vpDisparitySearchBound_.push_back(std::make_pair(min_disparity_, max_disparity_));//disparity searchbound 得到disp的最大以及最小值
 }
 
 bool esvo_core::core::EventBM::match_an_event(
@@ -82,8 +82,8 @@ bool esvo_core::core::EventBM::match_an_event(
   std::pair<size_t, size_t>& pDisparityBound,
   esvo_core::core::EventMatchPair& emPair)
 {
-  size_t lowDisparity = pDisparityBound.first;
-  size_t upDisparity  = pDisparityBound.second;
+  size_t lowDisparity = pDisparityBound.first;//disp 
+  size_t upDisparity  = pDisparityBound.second;//??
   // rectify and floor the coordinate
   Eigen::Vector2d x_rect = camSysPtr_->cam_left_ptr_->getRectifiedUndistortedCoordinate(pEvent->x, pEvent->y);
   // check if the rectified and undistorted coordinates are outside the image plane. (Added by Yi Zhou on 12 Jan 2021)
@@ -93,8 +93,8 @@ bool esvo_core::core::EventBM::match_an_event(
   // This is to avoid depth estimation happening in the mask area.
   if(camSysPtr_->cam_left_ptr_->UndistortRectify_mask_(x_rect(1), x_rect(0)) <= 125)
     return false;
-  Eigen::Vector2i x1(std::floor(x_rect(0)), std::floor(x_rect(1)));
-  Eigen::Vector2i x1_left_top;
+  Eigen::Vector2i x1(std::floor(x_rect(0)), std::floor(x_rect(1)));//x1是rect的正中间
+  Eigen::Vector2i x1_left_top;//x1左上角x1(0)-wx,x1(1)-wy 位置
   if(!isValidPatch(x1, x1_left_top))
     return false;
   // extract the template patch in the left time_surface
@@ -141,17 +141,17 @@ bool esvo_core::core::EventBM::match_an_event(
   if(min_cost <= ZNCC_Threshold_)
   {
     emPair.x_left_raw_ = Eigen::Vector2d((double)pEvent->x, (double)pEvent->y);
-    emPair.x_left_ = x_rect;
+    emPair.x_left_ = x_rect;//x_rect =getundistorted(p_event->x,p_event->y)
     emPair.x_right_ = Eigen::Vector2d((double)bestMatch(0), (double)bestMatch(1)) ;
-    emPair.t_ = pEvent->ts;
-    double disparity;
+    emPair.t_ = pEvent->ts;//事件时间戳
+    double disparity;//得到左右两目视差 empair 输入左事件和右目匹配点以及时间戳 ts
     if(bUpDownConfiguration_)
       disparity = x1(1) - bestMatch(1);
     else
-      disparity = x1(0) - bestMatch(0);
+      disparity = x1(0) - bestMatch(0);//BM得到深度
     double depth = camSysPtr_->baseline_ * camSysPtr_->cam_left_ptr_->P_(0,0) / disparity;
-
-    auto st_map_iter = tools::StampTransformationMap_lower_bound(*pSt_map_, emPair.t_);
+    
+    auto st_map_iter = tools::StampTransformationMap_lower_bound(*pSt_map_, emPair.t_);//大于等于时间t的第一个trans
     if(st_map_iter == pSt_map_->end())
       return false;
     emPair.trans_ = st_map_iter->second;
@@ -166,7 +166,7 @@ bool esvo_core::core::EventBM::match_an_event(
     return false;
   }
 }
-
+//延极线搜索右目和左目通过zncc比较模板，得到最好的匹配点x2，比较标准为zncc_min<zncc_cost
 bool esvo_core::core::EventBM::epipolarSearching(
   double& min_cost, Eigen::Vector2i& bestMatch, size_t& bestDisp, Eigen::MatrixXd& patch_dst,
   size_t searching_start_pos, size_t searching_end_pos, size_t searching_step,
@@ -178,17 +178,17 @@ bool esvo_core::core::EventBM::epipolarSearching(
   for(size_t disp = searching_start_pos;disp <= searching_end_pos; disp+=searching_step)
   {
     Eigen::Vector2i x2;
-    if(!bUpDownConfiguration)
-      x2 << x1(0) - disp, x1(1);
+    if(!bUpDownConfiguration)//
+      x2 << x1(0) - disp, x1(1);//沿x方向寻找
     else
-      x2 << x1(0), x1(1) - disp;
+      x2 << x1(0), x1(1) - disp;//from x1 to x2   yan y方向寻找  
     Eigen::Vector2i x2_left_top;
     if(!isValidPatch(x2, x2_left_top))
     {
-      mDispCost.emplace(disp, ZNCC_MAX_);
+      mDispCost.emplace(disp, ZNCC_MAX_);//
       continue;
     }
-
+    //patch dst 右目Ts block
     patch_dst = pStampedTsObs_->second.TS_right_.block(
       x2_left_top(1), x2_left_top(0), patch_size_Y_, patch_size_X_);
     double cost = ZNCC_MAX_;
@@ -281,7 +281,7 @@ void esvo_core::core::EventBM::match_all_HyperThread(
   std::vector<std::thread> threads;
   threads.reserve(NUM_THREAD_);
   for(size_t i = 0; i< NUM_THREAD_; i++)
-    threads.emplace_back(std::bind(&EventBM::match, this, jobs[i]));
+    threads.emplace_back(std::bind(&EventBM::match, this, jobs[i]));//match pvEventMatchPair.push_bakc(emp)
   for(auto & thread : threads)
   {
     if(thread.joinable())
@@ -289,10 +289,10 @@ void esvo_core::core::EventBM::match_all_HyperThread(
   }
   size_t numPoints = 0;
   for(size_t i = 0;i < NUM_THREAD_;i++)
-    numPoints += jobs[i].pvEventMatchPair_->size();
+    numPoints += jobs[i].pvEventMatchPair_->size();//先分出来再合起来
   vEMP.clear();
   vEMP.reserve(numPoints);
-  for(size_t i = 0;i < NUM_THREAD_;i++)
+  for(size_t i = 0;i < NUM_THREAD_;i++)//vEmp
     vEMP.insert(vEMP.end(), jobs[i].pvEventMatchPair_->begin(), jobs[i].pvEventMatchPair_->end());
 }
 
@@ -304,12 +304,12 @@ void esvo_core::core::EventBM::match(
   job.pvEventMatchPair_->reserve(totalNumEvents / NUM_THREAD_ + 1);
 
   auto ev_it = job.pvEventPtr_->begin();
-  std::advance(ev_it, i_thread);
+  std::advance(ev_it, i_thread);//将迭代器前进或后退指定长度的距离
   for(size_t i = i_thread; i < totalNumEvents; i+=NUM_THREAD_, std::advance(ev_it, NUM_THREAD_))
   {
     EventMatchPair emp;
     std::pair<size_t, size_t> pDisparityBound = (*job.pvpDisparitySearchBound_)[i];
-    if(match_an_event(*ev_it, pDisparityBound, emp))
+    if(match_an_event(*ev_it, pDisparityBound, emp))//emp=&empair.
       job.pvEventMatchPair_->push_back(emp);
   }
 }

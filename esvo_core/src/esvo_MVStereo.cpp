@@ -221,7 +221,7 @@ void esvo_MVStereo::MappingLoop(
         r.sleep();
         continue;
       }
-      publishKFPose(TS_obs_.first, TS_obs_.second.tr_);
+      publishKFPose(TS_obs_.first, TS_obs_.second.tr_);//先有pose再有mapping
       MappingAtTime(TS_obs_.first);
     }
     else

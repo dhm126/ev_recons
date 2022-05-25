@@ -13,10 +13,12 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <esvo_core/container/CameraSystem.h>
+#include <esvo_core/container/KeyFrame.h>
 #include <esvo_core/core/RegProblemLM.h>
 #include <esvo_core/core/RegProblemSolverLM.h>
 #include <esvo_core/tools/utils.h>
 #include <esvo_core/tools/Visualization.h>
+// #include <esvo_core/optimization/optimizer.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -31,6 +33,7 @@
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 
+// #include "optimization/optimizer.h"
 namespace esvo_core
 {
 using namespace core;
@@ -73,6 +76,11 @@ class esvo_Tracking
     esvo_core::Transformation &Tr,// T_world_something
     const std::string& source_frame );
 
+  //keyframes and optimziaiton 
+  // bool needKeyframe(); 
+  // void insertKeyFrame();
+
+
   private:
   ros::NodeHandle nh_, pnh_;
   image_transport::ImageTransport it_;
@@ -114,6 +122,14 @@ class esvo_Tracking
   RefFrame ref_;
   CurFrame cur_;
 
+  // std::shared_ptr<KeyFrame> wocao_; 
+  // std::deque<KeyFrame> dkfs_;
+  // std::shared_ptr<std::deque<KeyFrame>> dkfsPtr_;
+  // std::vector<KeyFrame> vkfs_;
+
+  size_t old_id=0;
+  size_t cur_id;
+
   /**** offline parameters ***/
   size_t tracking_rate_hz_;
   size_t TS_HISTORY_LENGTH_;
@@ -131,6 +147,9 @@ class esvo_Tracking
   std::string ESVO_System_Status_;
   RegProblemConfig::Ptr rpConfigPtr_;
   RegProblemSolverLM rpSolver_;
+
+  //optimizer optimizer_;
+
 };
 }
 

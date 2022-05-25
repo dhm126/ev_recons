@@ -19,14 +19,14 @@ void DepthProblem::setProblem(
   Eigen::Matrix<double, 4, 4> & T_world_virtual,
   StampedTimeSurfaceObs* pStampedTsObs)
 {
-  coordinate_      = coor;
-  T_world_virtual_ = T_world_virtual;
-  pStampedTsObs_ = pStampedTsObs;
+  coordinate_      = coor;//x_left
+  T_world_virtual_ = T_world_virtual;//come from st_map in emp
+  pStampedTsObs_ = pStampedTsObs;//tsobs
 
   vT_left_virtual_.clear();
   vT_left_virtual_.reserve(1);
   Eigen::Matrix<double,4,4> T_left_world = pStampedTsObs_->second.tr_.inverse().getTransformationMatrix();
-  Eigen::Matrix<double,4,4> T_left_virtual = T_left_world * T_world_virtual_;
+  Eigen::Matrix<double,4,4> T_left_virtual = T_left_world * T_world_virtual_;//当前相机左目坐标系
   vT_left_virtual_.push_back(T_left_virtual.block<3,4>(0,0));
   resetNumberValues(dpConfigPtr_->patchSize_X_ * dpConfigPtr_->patchSize_Y_);
 }

@@ -15,7 +15,7 @@ DepthRegularization::DepthRegularization(
 }
 
 DepthRegularization::~DepthRegularization() {}
-
+//apply neighbours depthpoint into a same depthpoint 
 void DepthRegularization::apply( DepthMap::Ptr& depthMapPtr )
 {
   DepthMap &dm = *depthMapPtr.get();

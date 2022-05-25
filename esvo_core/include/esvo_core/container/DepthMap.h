@@ -10,7 +10,7 @@ namespace esvo_core
 using namespace tools;
 namespace container
 {
-using DepthMap = SmartGrid<DepthPoint>;
+using DepthMap = SmartGrid<DepthPoint>;//二维 grid中间有很多深度点
 
 struct DepthFrame
 {

@@ -1,0 +1,27 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/zhouyum/catkin_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/zhouyum/catkin_ws/src/rpg_dvs_ros/dvs_renderer/include/**",
+        "/home/zhouyum/catkin_ws/src/rpg_dvs_ros/dvs_ros_driver/include/**",
+        "/home/zhouyum/catkin_ws/src/eigen_checks/include/**",
+        "/home/zhouyum/catkin_ws/src/ESVO/esvo_core/include",
+        "/home/zhouyum/catkin_ws/src/ESVO/esvo_time_surface/include/**",
+        "/home/zhouyum/catkin_ws/src/minkindr/minkindr/include",
+        "/home/zhouyum/catkin_ws/src/minkindr_ros/minkindr_conversions/include",
+        "/usr/include/**",
+        "/usr/include",
+        "/home/zhouyum/tools/g2o",
+        "/usr/include/eigen3"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

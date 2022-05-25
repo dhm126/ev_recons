@@ -5,9 +5,10 @@
 #include <tf/transform_broadcaster.h>
 #include <sys/stat.h>
 
-//#define ESVO_CORE_TRACKING_DEBUG
-//#define ESVO_CORE_TRACKING_DEBUG
 
+
+//#define ESVO_CORE_TRACKING_DEBUG
+//#define ESVO_CORE_TRACKING_LOG
 namespace esvo_core
 {
 esvo_Tracking::esvo_Tracking(
@@ -56,8 +57,8 @@ esvo_Tracking::esvo_Tracking(
     "events_left", 0, &esvo_Tracking::eventsCallback, this);
   TS_sync_.registerCallback(boost::bind(&esvo_Tracking::timeSurfaceCallback, this, _1, _2));
   tf_ = std::make_shared<tf::Transformer>(true, ros::Duration(100.0));
-  pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/esvo_tracking/pose_pub", 1);
-  path_pub_ = nh_.advertise<nav_msgs::Path>("/esvo_tracking/trajectory", 1);
+  pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/esvo_tracking/pose_pub", 1);//save pose pub 
+  path_pub_ = nh_.advertise<nav_msgs::Path>("/esvo_tracking/trajectory", 1);//save trajectory 
   map_sub_ = nh_.subscribe("pointcloud", 0, &esvo_Tracking::refMapCallback, this);// local map in the ref view.
   stampedPose_sub_ = nh_.subscribe("stamped_pose", 0, &esvo_Tracking::stampedPoseCallback, this);// for accessing the pose of the ref view.
 
@@ -67,6 +68,9 @@ esvo_Tracking::esvo_Tracking(
 
   /*** Tracker ***/
   T_world_cur_ = Eigen::Matrix<double,4,4>::Identity();
+//   wocao_= std::make_shared<KeyFrame>();
+  
+  
   std::thread TrackingThread(&esvo_Tracking::TrackingLoop, this);
   TrackingThread.detach();
 }
@@ -81,7 +85,7 @@ void esvo_Tracking::TrackingLoop()
   ros::Rate r(tracking_rate_hz_);
   while(ros::ok())
   {
-    // Keep Idling
+    // Keep Idling 未开始工作
     if(refPCMap_.size() < 1 || TS_history_.size() < 1)
     {
       r.sleep();
@@ -104,9 +108,9 @@ void esvo_Tracking::TrackingLoop()
     // Data Transfer (If mapping node had published refPC.)
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
-      if(ref_.t_.toSec() < refPCMap_.rbegin()->first.toSec())// new reference map arrived
+      if(ref_.t_.toSec() < refPCMap_.rbegin()->first.toSec())// new reference map arrived reference frame
         refDataTransferring();
-      if(cur_.t_.toSec() < TS_history_.rbegin()->first.toSec())// new observation arrived
+      if(cur_.t_.toSec() < TS_history_.rbegin()->first.toSec())// new observation arrived current frame 
       {
         if(ref_.t_.toSec() >= TS_history_.rbegin()->first.toSec())
         {
@@ -118,8 +122,12 @@ void esvo_Tracking::TrackingLoop()
       }
       else
         continue;
+    
+    // optimizer_.updateKf(ref_.vPointXYZPtr_,ref_.tr_,cur_.pTsObs_->id_,ref_.t_,kfi);
+    // vkfs.push_back(kfi);
     }
-
+   // std::cout<<wocao_->kfid_<<std::endl;
+     // std::shared_ptr vpkfs
     // create new regProblem
     TicToc tt;
     double t_resetRegProblem, t_solve, t_pub_result, t_pub_gt;
@@ -139,12 +147,15 @@ void esvo_Tracking::TrackingLoop()
       if(rpType_ == REG_NUMERICAL)
         rpSolver_.solve_numerical();
       if(rpType_ == REG_ANALYTICAL)
-        rpSolver_.solve_analytical();
+        rpSolver_.solve_analytical();//solve  registration problem using ana or numerical method =REGPROBLEM SOLVER
 #ifdef ESVO_CORE_TRACKING_DEBUG
       t_solve = tt.toc();
       tt.tic();
 #endif
-      T_world_cur_ = cur_.tr_.getTransformationMatrix();
+
+      T_world_cur_ = cur_.tr_.getTransformationMatrix();//update trans (pose,path)
+      
+      
       publishPose(cur_.t_, cur_.tr_);
       if(bVisualizeTrajectory_)
         publishPath(cur_.t_, cur_.tr_);
@@ -170,6 +181,9 @@ void esvo_Tracking::TrackingLoop()
 #ifdef  ESVO_CORE_TRACKING_LOG
     double t_overall_count = 0;
     t_overall_count = t_resetRegProblem + t_solve + t_pub_result;
+   
+
+   
     LOG(INFO) << "\n";
     LOG(INFO) << "------------------------------------------------------------";
     LOG(INFO) << "--------------------Tracking Computation Cost---------------";
@@ -198,12 +212,12 @@ void esvo_Tracking::TrackingLoop()
     saveTrajectory(resultPath_ + "result.txt");
   }
 }
-
+//将ref点云map中复制到ref_frame中,迭代cur_frame
 bool
 esvo_Tracking::refDataTransferring()
 {
   // load reference info
-  ref_.t_ = refPCMap_.rbegin()->first;
+  ref_.t_ = refPCMap_.rbegin()->first;//load arrived point cloud info
 
   nh_.getParam("/ESVO_SYSTEM_STATUS", ESVO_System_Status_);
 //  LOG(INFO) << "SYSTEM STATUS(T"
@@ -211,7 +225,7 @@ esvo_Tracking::refDataTransferring()
     ref_.tr_.setIdentity();
   if(ESVO_System_Status_ == "WORKING" || (ESVO_System_Status_ == "INITIALIZATION" && ets_ == WORKING))
   {
-    if(!getPoseAt(ref_.t_, ref_.tr_, dvs_frame_id_))
+    if(!getPoseAt(ref_.t_, ref_.tr_, dvs_frame_id_))//虽然tracking 在working 但并没有trans传入 getPose tf。lookuptransfomation
     {
       LOG(INFO) << "ESVO_System_Status_: " << ESVO_System_Status_ << ", ref_.t_: " << ref_.t_.toNSec();
       LOG(INFO) << "Logic error ! There must be a pose for the given timestamp, because mapping has been finished.";
@@ -221,8 +235,10 @@ esvo_Tracking::refDataTransferring()
   }
 
   size_t numPoint = refPCMap_.rbegin()->second->size();
+  // std::cout<<"num depth point=="<<numPoint<<std::endl;
   ref_.vPointXYZPtr_.clear();
   ref_.vPointXYZPtr_.reserve(numPoint);
+  
   auto PointXYZ_begin_it = refPCMap_.rbegin()->second->begin();
   auto PointXYZ_end_it   = refPCMap_.rbegin()->second->end();
   while(PointXYZ_begin_it != PointXYZ_end_it)
@@ -232,30 +248,30 @@ esvo_Tracking::refDataTransferring()
   }
   return true;
 }
-
+//根据系统状态将参考或世界坐标trans传入curframe 迭代ref_和cur_的过程
 bool
 esvo_Tracking::curDataTransferring()
 {
   // load current observation
   auto ev_last_it = EventBuffer_lower_bound(events_left_, cur_.t_);
-  auto TS_it = TS_history_.rbegin();
+  auto TS_it = TS_history_.rbegin();//TS_history time surface std::pair <ros::time,timesurface Observation>
 
   // TS_history may not be updated before the tracking loop excutes the data transfering
-  if(cur_.t_ == TS_it->first)
+  if(cur_.t_ == TS_it->first)//ts一直==cur时代表未曾data trans
     return false;
-  cur_.t_ = TS_it->first;
-  cur_.pTsObs_ = &TS_it->second;
-
+  cur_.t_ = TS_it->first;//ros::time
+  cur_.pTsObs_ = &TS_it->second;//time surface obversation
+  // std::cout<<"current id =="<<cur_.pTsObs_->id_<<std::endl;
   nh_.getParam("/ESVO_SYSTEM_STATUS", ESVO_System_Status_);
   if(ESVO_System_Status_ == "INITIALIZATION" && ets_ == IDLE)
   {
-    cur_.tr_ = ref_.tr_;
+    cur_.tr_ = ref_.tr_;//既然系统保持不动的话则前后两帧没有变化||transformation
 //    LOG(INFO) << "(IDLE) Assign cur's ("<< cur_.t_.toNSec() << ") pose with ref's at " << ref_.t_.toNSec();
     // LOG(INFO) << " " << cur_.tr_.getTransformationMatrix() << " ";
   }
   if(ESVO_System_Status_ == "WORKING" || (ESVO_System_Status_ == "INITIALIZATION" && ets_ == WORKING))
   {
-    cur_.tr_ = Transformation(T_world_cur_);
+    cur_.tr_ = Transformation(T_world_cur_);//迭代lm计算得到的cur_transformation
 //    LOG(INFO) << "(WORKING) Assign cur's ("<< cur_.t_.toNSec() << ") pose with T_world_cur.";
   }
   // Count the number of events occuring since the last observation.
@@ -341,8 +357,8 @@ esvo_Tracking::timeSurfaceCallback(
   // push back the most current TS.
   ros::Time t_new_ts = time_surface_left->header.stamp;
   TS_history_.emplace(t_new_ts, TimeSurfaceObservation(cv_ptr_left, cv_ptr_right, TS_id_, false));
-  TS_id_++;
-
+  TS_id_++;//id==count
+  
   // keep TS_history_'s size constant
   while(TS_history_.size() > TS_HISTORY_LENGTH_)
   {
@@ -374,10 +390,10 @@ void esvo_Tracking::stampedPoseCallback(const geometry_msgs::PoseStampedConstPtr
 
 bool
 esvo_Tracking::getPoseAt(
-  const ros::Time &t, esvo_core::Transformation &Tr, const std::string &source_frame)
+  const ros::Time &t, esvo_core::Transformation &Tr, const std::string &source_frame)//在时间t source frame 下的trans
 {
   std::string* err_msg = new std::string();
-  if(!tf_->canTransform(world_frame_id_, source_frame, t, err_msg))
+  if(!tf_->canTransform(world_frame_id_, source_frame, t, err_msg))//tf cannot
   {
     LOG(WARNING) << t.toNSec() << " : " << *err_msg;
     delete err_msg;
@@ -386,7 +402,7 @@ esvo_Tracking::getPoseAt(
   else
   {
     tf::StampedTransform st;
-    tf_->lookupTransform(world_frame_id_, source_frame, t, st);
+    tf_->lookupTransform(world_frame_id_, source_frame, t, st);//等待时间t，从st开始
     tf::transformTFToKindr(st, &Tr);
     return true;
   }
@@ -406,6 +422,7 @@ void esvo_Tracking::publishPose(const ros::Time &t, Transformation &tr)
   ps_ptr->pose.orientation.z = tr.getRotation().z();
   ps_ptr->pose.orientation.w = tr.getRotation().w();
   pose_pub_.publish(ps_ptr);
+  
 }
 
 void esvo_Tracking::publishPath(const ros::Time& t, Transformation& tr)

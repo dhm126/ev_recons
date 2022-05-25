@@ -144,7 +144,7 @@ PerspectiveCamera::world2Cam(
   Eigen::Vector2d &x)
 {
   Eigen::Vector3d x_hom = P_.block<3, 3>(0, 0) * p + P_.block<3, 1>(0, 3);
-  x = x_hom.head(2) / x_hom(2);
+  x = x_hom.head(2) / x_hom(2);//取了前两个值
 }
 
 /************************************************************/

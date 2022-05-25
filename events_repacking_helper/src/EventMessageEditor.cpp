@@ -96,8 +96,8 @@ int main(int argc, char* argv[])
 
   // process events
   std::vector<std::string> topics;
-  topics.push_back(std::string("/davis_left/events"));
-  topics.push_back(std::string("/davis_right/events"));
+  topics.push_back(std::string("/davis/left/events"));
+  topics.push_back(std::string("/davis/right/events"));
   std::vector<std::string> topics_rename;
   topics_rename.push_back(std::string("/davis/left/events"));
   topics_rename.push_back(std::string("/davis/right/events"));
@@ -121,6 +121,7 @@ int main(int argc, char* argv[])
 
   bag_src.close();
   bag_dst.close();
+  ROS_INFO("repacking has been done  ");
   return 0;
 }
 

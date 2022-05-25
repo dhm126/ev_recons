@@ -20,9 +20,12 @@
 #include <esvo_core/core/EventBM.h>
 #include <esvo_core/tools/utils.h>
 #include <esvo_core/tools/Visualization.h>
-
+#include <esvo_core/container/KeyFrame.h>
 #include <dynamic_reconfigure/server.h>
+
 #include <esvo_core/DVS_MappingStereoConfig.h>
+
+#include <esvo_core/optimization/optimizer.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -61,11 +64,15 @@ class esvo_Mapping
     const sensor_msgs::ImageConstPtr& time_surface_left,
     const sensor_msgs::ImageConstPtr& time_surface_right);
   void onlineParameterChangeCallback(DVS_MappingStereoConfig &config, uint32_t level);
-
+  void loopResultCallback(const geometry_msgs::PoseStampedConstPtr & lc_msg);
   // utils
   bool getPoseAt(const ros::Time& t, Transformation& Tr, const std::string& source_frame);
   void clearEventQueue(EventQueue& EQ);
   void reset();
+
+  bool needKeyFrame();
+
+  void runPGoptimization();
 
   /*** publish results ***/
   void publishMappingResults(
@@ -108,7 +115,7 @@ class esvo_Mapping
 
   // Subscribers
   ros::Subscriber events_left_sub_, events_right_sub_;
-  ros::Subscriber stampedPose_sub_;
+  ros::Subscriber stampedPose_sub_,loopPose_sub_;
   message_filters::Subscriber<sensor_msgs::Image> TS_left_sub_, TS_right_sub_;
 
   // Publishers
@@ -139,6 +146,15 @@ class esvo_Mapping
   size_t TS_id_;
   ros::Time tf_lastest_common_time_;
 
+  std::shared_ptr <std::deque<KeyFrame>> vpkfs_;
+  
+  std::deque<KeyFrame> dkfs_;
+  bool bInsertKeyframe_;
+  std::map<ros::Time,Eigen::Matrix4d > mPose_lc_;
+  bool bLoop_over_;
+  std::vector<bool> bInsertion_;
+  bool bDoubleInsert_;
+
   // system
   std::string ESVO_System_Status_;
   DepthProblemConfig::Ptr dpConfigPtr_;
@@ -147,6 +163,8 @@ class esvo_Mapping
   DepthRegularization dRegularizor_;
   Visualization visualizor_;
   EventBM ebm_;
+
+  optimizer op_;
 
   // data transfer
   std::vector<dvs_msgs::Event *> vALLEventsPtr_left_;// for BM
@@ -158,12 +176,13 @@ class esvo_Mapping
   // result
   PointCloud::Ptr pc_, pc_near_, pc_global_;
   DepthFrame::Ptr depthFramePtr_;
+  
   std::deque<std::vector<DepthPoint> > dqvDepthPoints_;
 
   // inter-thread management
   std::mutex data_mutex_;
   std::promise<void> mapping_thread_promise_, reset_promise_;
-  std::future<void> mapping_thread_future_, reset_future_;
+  std::future<void> mapping_thread_future_, reset_future_;//获取绑定promise的值
 
   /**** mapping parameters ***/
   // range and visualization threshold
@@ -216,9 +235,13 @@ class esvo_Mapping
   /******************** For test & debug ********************/
   /**********************************************************/
   image_transport::Publisher invDepthMap_pub_, stdVarMap_pub_, ageMap_pub_, costMap_pub_;
+  size_t old_id=0;
+  size_t cur_id;  
 
+  Eigen::Matrix4d tcw_,last_tcw_;
   // For counting the total number of fusion
   size_t TotalNumFusion_;
+  
 };
 }
 

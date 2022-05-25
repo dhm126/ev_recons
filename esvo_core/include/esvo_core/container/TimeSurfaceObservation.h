@@ -118,14 +118,14 @@ struct TimeSurfaceObservation
   inline void getTimeSurfaceNegative(size_t kernelSize)
   {
     Eigen::MatrixXd ceilMat(TS_left_.rows(), TS_left_.cols());
-    ceilMat.setConstant(255.0);
+    ceilMat.setConstant(255.0);//0
     if (kernelSize > 0)
     {
       cv::Mat mat_left_;
       cv::GaussianBlur(cvImagePtr_left_->image, mat_left_,
                        cv::Size(kernelSize, kernelSize), 0.0);
       cv::cv2eigen(mat_left_, TS_blurred_left_);
-      TS_negative_left_ = ceilMat - TS_blurred_left_;
+      TS_negative_left_ = ceilMat - TS_blurred_left_;//0-Ts_blured
     }
     else
     {
@@ -133,29 +133,30 @@ struct TimeSurfaceObservation
     }
   }
 
-  inline void computeTsNegativeGrad()
+  inline void computeTsNegativeGrad()//利用sobel求ts_flipped_left dx dy 方向梯度
   {
     cv::Mat cv_TS_flipped_left;
     cv::eigen2cv(TS_negative_left_, cv_TS_flipped_left);
 
     cv::Mat cv_dFlippedTS_du_left, cv_dFlippedTS_dv_left;
-    cv::Sobel(cv_TS_flipped_left, cv_dFlippedTS_du_left, CV_64F, 1, 0);
-    cv::Sobel(cv_TS_flipped_left, cv_dFlippedTS_dv_left, CV_64F, 0, 1);
+    cv::Sobel(cv_TS_flipped_left, cv_dFlippedTS_du_left, CV_64F, 1, 0);//dx
+    cv::Sobel(cv_TS_flipped_left, cv_dFlippedTS_dv_left, CV_64F, 0, 1);//dy
 
     cv::cv2eigen(cv_dFlippedTS_du_left, dTS_negative_du_left_);
     cv::cv2eigen(cv_dFlippedTS_dv_left, dTS_negative_dv_left_);
   }
 
   Eigen::MatrixXd TS_left_, TS_right_;
-  Eigen::MatrixXd TS_blurred_left_;
-  Eigen::MatrixXd TS_negative_left_;
+  Eigen::MatrixXd TS_blurred_left_;//guassin blured
+  Eigen::MatrixXd TS_negative_left_;//0- 
   cv_bridge::CvImagePtr cvImagePtr_left_, cvImagePtr_right_;
   Transformation tr_;
-  Eigen::MatrixXd dTS_du_left_, dTS_dv_left_;
+  Eigen::MatrixXd dTS_du_left_, dTS_dv_left_;//du dv 分别为dx dy两个方向梯度  
   Eigen::MatrixXd dTS_negative_du_left_, dTS_negative_dv_left_;
   size_t id_;
-};
+};//class of time surface observation
 
+//time cmp
 struct ROSTimeCmp
 {
   bool operator()(const ros::Time &a, const ros::Time &b) const
@@ -166,7 +167,7 @@ struct ROSTimeCmp
 
 using TimeSurfaceHistory = std::map<ros::Time, TimeSurfaceObservation, ROSTimeCmp>;
 using StampedTimeSurfaceObs = std::pair<ros::Time, TimeSurfaceObservation>;
-
+//返回第一个大于tshistory时间戳的位置
 inline static TimeSurfaceHistory::iterator TSHistory_lower_bound(TimeSurfaceHistory &ts_history, ros::Time &t)
 {
   return std::lower_bound(ts_history.begin(), ts_history.end(), t,
@@ -174,7 +175,7 @@ inline static TimeSurfaceHistory::iterator TSHistory_lower_bound(TimeSurfaceHist
                             return tso.first.toSec() < t.toSec();
                           });
 }
-
+//
 inline static TimeSurfaceHistory::iterator TSHistory_upper_bound(TimeSurfaceHistory &ts_history, ros::Time &t)
 {
   return std::upper_bound(ts_history.begin(), ts_history.end(), t,

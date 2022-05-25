@@ -48,7 +48,7 @@ public:
         eq.pop_front();
     }
   }
-
+//只保存最近的事件、如果有之前的事件和当前位置相同则不保存
   bool getMostRecentEventBeforeT(
     const size_t x,
     const size_t y,
@@ -78,7 +78,7 @@ public:
   {
     eqMat_.clear();
   }
-
+//events inside the image coordinates
   bool insideImage(const size_t x, const size_t y)
   {
     return !(x < 0 || x >= width_ || y < 0 || y >= height_);
@@ -141,7 +141,9 @@ private:
   ros::Subscriber camera_info_sub_;
   ros::Subscriber sync_topic_;
   image_transport::Publisher time_surface_pub_;
-
+  int iCount; 
+  int f_print_;
+  bool gaodianPictures(const ros::Time &time,cv::Mat &image,int cishu,bool print);
   // online parameters
   bool bCamInfoAvailable_;
   bool bUse_Sim_Time_;  

@@ -116,7 +116,7 @@ void Visualization::plot_events(
     int xcoor = std::floor((*it)(0));
     int ycoor = std::floor((*it)(1));
     if(xcoor < 0 || xcoor >= col || ycoor < 0 || ycoor >= row)
-    {}
+    {}//out of range
     else
       event_img.at<uchar>(ycoor, xcoor) = 255;
     it++;

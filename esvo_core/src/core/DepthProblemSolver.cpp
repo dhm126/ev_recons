@@ -24,7 +24,7 @@ DepthProblemSolver::DepthProblemSolver(
 DepthProblemSolver::~DepthProblemSolver()
 {
 }
-
+//通过point vector EMP tsobs 求解vdp
 void DepthProblemSolver::solve(
   std::vector<EventMatchPair>* pvEMP,
   StampedTimeSurfaceObs* pStampedTsObs,
@@ -82,16 +82,16 @@ void DepthProblemSolver::solve_multiple_problems(Job & job)
   size_t i_thread = job.i_thread_;
   size_t numEvent = job.pvEMP_->size();
   job.vdpPtr_->clear();
-  job.vdpPtr_->reserve(numEvent / NUM_THREAD_ + 1);
+  job.vdpPtr_->reserve(numEvent / NUM_THREAD_ + 1);//pvEmp/num_thread
 
-  StampedTimeSurfaceObs* pStampedTsObs = job.pStamped_TS_obs_;
+  StampedTimeSurfaceObs* pStampedTsObs = job.pStamped_TS_obs_;//tsobs
 
   // loop through vdp and call solve_single_problem
   for(size_t i = i_thread; i < numEvent; i+=NUM_THREAD_)
   {
-    Eigen::Vector2d coor = (*job.pvEMP_)[i].x_left_;
+    Eigen::Vector2d coor = (*job.pvEMP_)[i].x_left_;//I-thread 的x_left
     Eigen::Matrix<double, 4, 4> T_world_virtual = (*job.pvEMP_)[i].trans_.getTransformationMatrix();
-    double d_init = (*job.pvEMP_)[i].invDepth_;
+    double d_init = (*job.pvEMP_)[i].invDepth_;//逆深度 
 
     double result[3];
     bool bProblemSolved = false;
@@ -113,31 +113,31 @@ void DepthProblemSolver::solve_multiple_problems(Job & job)
 
     if(bProblemSolved)
     {
-      DepthPoint dp(std::floor(coor(1)), std::floor(coor(0)));
-      dp.update_x(coor);
+      DepthPoint dp(std::floor(coor(1)), std::floor(coor(0)));//x_left
+      dp.update_x(coor);//
       Eigen::Vector3d p_cam;
-      camSysPtr_->cam_left_ptr_->cam2World(coor, result[0], p_cam);
-      dp.update_p_cam(p_cam);
+      camSysPtr_->cam_left_ptr_->cam2World(coor, result[0], p_cam);//result[0]=invdepth
+      dp.update_p_cam(p_cam);//
       if(strcmp(dpConfigPtr_->LSnorm_.c_str(), "l2") == 0)
-        dp.update(result[0], result[1]);
+        dp.update(result[0], result[1]);//invdepth var
       else if(strcmp(dpConfigPtr_->LSnorm_.c_str(), "Tdist") == 0)
       {
-        double scale2_rho = result[1] * (dpConfigPtr_->td_nu_ - 2) / dpConfigPtr_->td_nu_;
+        double scale2_rho = result[1] * (dpConfigPtr_->td_nu_ - 2) / dpConfigPtr_->td_nu_;//论文公式11 scale^2/jjt
         dp.update_studentT(result[0], scale2_rho, result[1], dpConfigPtr_->td_nu_);
       }
       else
         exit(-1);
 
       dp.residual() = result[2];
-      dp.updatePose(T_world_virtual);
+      dp.updatePose(T_world_virtual);//dp只记下当前相机坐标系
       job.vdpPtr_->push_back(dp);
     }
   }
 }
 
 bool DepthProblemSolver::solve_single_problem_numerical(
-  double d_init,
-  std::shared_ptr< Eigen::NumericalDiff<DepthProblem> > & dProblemPtr,
+  double d_init,//inverse depth 
+  std::shared_ptr< Eigen::NumericalDiff<DepthProblem> > & dProblemPtr,//T_virtual_world tsobs coor 
   double* result)
 {
   Eigen::VectorXd x(1);
@@ -189,11 +189,11 @@ bool DepthProblemSolver::solve_single_problem_numerical(
 
   // Since there is no way to set a optimization bound
   // on x in Eigen (as far as I know), a handy outlier rejection is applied here.
-  if(x(0) <= 0.001)// we cannot see that far, right?
+  if(x(0) <= 0.001)// we cannot see that far, right? 
     return false;
 
   // update
-  result[0] = x(0);
+  result[0] = x(0);//invdepth
   // calculate the variance according to
   // https://android.googlesource.com/platform/external/eigen/+/jb-mr2-release/unsupported/test/NonLinearOptimization.cpp
   Eigen::internal::covar(lm.fjac, lm.permutation.indices());
@@ -207,12 +207,12 @@ bool DepthProblemSolver::solve_single_problem_numerical(
   if(dpConfigPtr_->LSnorm_ == "Tdist")
   {
     Eigen::MatrixXd invSumJtT = lm.fjac.topLeftCorner<1,1>();
-    result[1] = std::pow(dpConfigPtr_->td_stdvar_,2) * invSumJtT(0,0);
+    result[1] = std::pow(dpConfigPtr_->td_stdvar_,2) * invSumJtT(0,0);//var
   }
-  result[2] = lm.fnorm * lm.fnorm;
+  result[2] = lm.fnorm * lm.fnorm;//residual
   return true;
 }
-
+//筛选在范围内的Vdepthpoint
 void
 DepthProblemSolver::pointCulling(
   std::vector<DepthPoint> &vdp,
@@ -234,7 +234,7 @@ DepthProblemSolver::pointCulling(
       vdp[i].invDepth() <= invDepth_max_range)
     {
       vdp_culled.push_back(vdp[i]);
-      vDepth.emplace_back(1.0 / vdp[i].invDepth());
+      vDepth.emplace_back(1.0 / vdp[i].invDepth());//emplalce_back 和push_back类似 vdepth
     }
   }
   vdp = vdp_culled;

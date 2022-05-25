@@ -6,8 +6,8 @@ age_max_range: 10
 age_vis_threshold: 1
 fusion_radius: 0
 FUSION_STRATEGY: "CONST_POINTS" # "CONST_FRAMES"
-maxNumFusionFrames: 40
-maxNumFusionPoints: 3000
+maxNumFusionFrames: 10
+maxNumFusionPoints: 2000
 Denoising: False
 SmoothTimeSurface: False
 Regularization: False

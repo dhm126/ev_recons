@@ -363,7 +363,7 @@ SmartGrid<T>::size() const
 {
   return _elements.size();
 }
-
+//||find neighbours depthpoint in frame
 template<class T>
 void
 SmartGrid<T>::getNeighbourhood(

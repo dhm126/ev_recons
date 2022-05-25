@@ -57,7 +57,7 @@ void esvo_core::core::EventMatcher::createMatchProblem(
   pvCandEventPtr_ = vEventPtr_cand;
 }
 
-bool esvo_core::core::EventMatcher::match_an_event(
+bool esvo_core::core::EventMatcher::match_an_event(//mvs里面用
   dvs_msgs::Event* ev_ptr,
   Transformation &Trans_world_rv,
   EventMatchPair &emPair)
@@ -269,9 +269,9 @@ double esvo_core::core::EventMatcher::zncc_cost(
 }
 
 bool esvo_core::core::EventMatcher::warping2(
-  const Eigen::Vector2d &x,
+  const Eigen::Vector2d &x,//left plane uv 
   double invDepth,
-  const Eigen::Matrix<double, 3, 4> &T_left_rv,
+  const Eigen::Matrix<double, 3, 4> &T_left_rv,//transformation between virtual to left
   Eigen::Vector2d &x1_s,
   Eigen::Vector2d &x2_s)
 {

@@ -1,5 +1,6 @@
 #include <esvo_time_surface/TimeSurface.h>
 #include <esvo_time_surface/TicToc.h>
+#include <opencv2/highgui.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <std_msgs/Float32.h>
 #include <glog/logging.h>
@@ -22,18 +23,22 @@ TimeSurface::TimeSurface(ros::NodeHandle & nh, ros::NodeHandle nh_private)
   // parameters
   nh_private.param<bool>("use_sim_time", bUse_Sim_Time_, true);
   nh_private.param<bool>("ignore_polarity", ignore_polarity_, true);
-  nh_private.param<double>("decay_ms", decay_ms_, 30);
+  nh_private.param<double>("decay_ms", decay_ms_, 30);//不能决定time_surface长度，只是一个指数衰减核
   int TS_mode;
-  nh_private.param<int>("time_surface_mode", TS_mode, 0);
+  nh_private.param<int>("time_surface_mode", TS_mode, 0);//backkward
   time_surface_mode_ = (TimeSurfaceMode)TS_mode;
   nh_private.param<int>("median_blur_kernel_size", median_blur_kernel_size_, 1);
   nh_private.param<int>("max_event_queue_len", max_event_queue_length_, 20);
-  //
+  //queue 每个像素位置的queue length
   bCamInfoAvailable_ = false;
   bSensorInitialized_ = false;
   if(pEventQueueMat_)
     pEventQueueMat_->clear();
   sensor_size_ = cv::Size(0,0);
+
+  int iCount;
+  int f_print;
+  bool print=false;
 }
 
 TimeSurface::~TimeSurface()
@@ -51,6 +56,7 @@ void TimeSurface::init(int width, int height)
 
 void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
 {
+  
   std::lock_guard<std::mutex> lock(data_mutex_);
 
   if(!bSensorInitialized_ || !bCamInfoAvailable_)
@@ -66,7 +72,7 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
   {
     for(int x=0; x<sensor_size_.width; ++x)
     {
-      dvs_msgs::Event most_recent_event_at_coordXY_before_T;
+      dvs_msgs::Event most_recent_event_at_coordXY_before_T;//extrnal time=current time
       if(pEventQueueMat_->getMostRecentEventBeforeT(x, y, external_sync_time, &most_recent_event_at_coordXY_before_T))
       {
         const ros::Time& most_recent_stamp_at_coordXY = most_recent_event_at_coordXY_before_T.ts;
@@ -74,9 +80,9 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
         {
           const double dt = (external_sync_time - most_recent_stamp_at_coordXY).toSec();
           double polarity = (most_recent_event_at_coordXY_before_T.polarity) ? 1.0 : -1.0;
-          double expVal = std::exp(-dt / decay_sec);
+          double expVal = std::exp(-dt / decay_sec);//rencent_time  -current_time/ decay_sec 
           if(!ignore_polarity_)
-            expVal *= polarity;
+            expVal *= polarity;//
 
           // Backward version
           if(time_surface_mode_ == BACKWARD)
@@ -134,10 +140,11 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
   static cv_bridge::CvImage cv_image;
   cv_image.encoding = "mono8";
   cv_image.image = time_surface_map.clone();
-
+  if(gaodianPictures(external_sync_time,time_surface_map,iCount,false)) {iCount++;}//LOG(INFO)<<"save imagery!"<<std::endl;}
   if(time_surface_mode_ == FORWARD && time_surface_pub_.getNumSubscribers() > 0)
   {
     cv_image.header.stamp = external_sync_time;
+    
     time_surface_pub_.publish(cv_image.toImageMsg());
   }
 
@@ -419,9 +426,9 @@ void TimeSurface::eventsCallback(const dvs_msgs::EventArray::ConstPtr& msg)
     events_[i+1] = e;
 
     const dvs_msgs::Event& last_event = events_.back();
-    pEventQueueMat_->insertEvent(last_event);
+    pEventQueueMat_->insertEvent(last_event);//events_
   }
-  clearEventQueue();
+  clearEventQueue();//
 }
 
 void TimeSurface::clearEventQueue()
@@ -433,5 +440,25 @@ void TimeSurface::clearEventQueue()
     events_.erase(events_.begin(), events_.begin() + remove_events);
   }
 }
+
+bool TimeSurface::gaodianPictures( const ros::Time &time, cv::Mat  &image ,int cishu,bool print){
+  const double t_print=time.toSec();
+ if (!print)  return false;
+    
+    if(  int  (t_print)%2==0 ){
+      if (f_print_<3){
+      std::stringstream ss;
+      ss.str(std::string());
+      ss << "/tmp/x_" << std::setfill('0') << std::setw(8) << cishu << ".png";
+      cv::imwrite(ss.str(),image);
+      std::cout<<"imwrite"<<cishu<<"current_time:"<<t_print<<std::endl;
+      LOG(INFO)<<"saving image to tmp directory";
+      f_print_++;
+      }      else return false;
+      
+      }else {f_print_=0;return false;}
+      
+ }//gaodian Pictures
+
 
 } // namespace esvo_time_surface
