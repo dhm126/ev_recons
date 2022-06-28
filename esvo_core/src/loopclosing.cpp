@@ -1,54 +1,47 @@
 #include <Eigen/Eigen>
 #include <opencv2/core/eigen.hpp>
 #include <esvo_core/loopdetector.h>
-
 #include <dvs_msgs/Event.h>
-#include <ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
 #include <glog/logging.h>
-#include <esvo_core/tools/fsolver.h>
 
 #include <thread>
 
 using namespace std;
 using namespace esvo_core;
 
+//#define LOOPDETECTOR_LOG
 dl::dl(
   const ros::NodeHandle &nh,
   const ros::NodeHandle &nh_private):
   nh_(nh),
   pnh_(nh_private),
-  //calibFile_(tools::param(pnh_,"calibinfoFIle",std::string(""))),
-  //camSYSPtr_(new CameraSystem(calibFile_,false )),
   my_voc_("/home/zhouyum/recon/src/dvs_mosaic/src/tsvoc.yml.gz"),
   my_database_(my_voc_,5,true)
-//  fsolver_(346,240)
-//camsysPtr
 {
-  
-  //voc_file="/home/zhouyum/recon/src/dvs_mosaic/src/tsvoc.yml.gz";
-
-  //my_voc_(voc_file);
-  //DBoW3::Database my_database_(my_voc_,5,true);
-  
-
-  std::vector<cv::Mat> images_;
+  calibFile_=std::string(tools::param(pnh_, "calibInfoDir", std::string("/home/zhouyum/catkin_ws/src/ESVO/esvo_core/calib/simu_njust")));
+  camSysPtr_= std::make_shared<esvo_core::container::CameraSystem>(calibFile_,false);
+  //std::vector<cv::Mat> images_;
   //change topic name in  need 
   acumulatedEvents_sub_=nh_.subscribe("/davis/left/image_raw",1,&dl::accumulatedEventCallback,this);
-
+  KeyFrame_sub_=nh_.subscribe("/KeyFrameIns",1,&dl::KeyframeInsertionCallback,this);
   image_transport::ImageTransport it_(nh_);
   image_pub=it_.advertise("/imageInLoopcandidates",0);
   pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/loop_closing/pose_pub", 1);//save pose pub 
 
   camera_Matrix_=cv::Mat::eye(3,3,CV_64F);
   // cv::Mat cameraMatrix=cv::Mat::zeros(3,3,CV_64FC1);
-  camera_Matrix_.at<double>(0,0)=226.38018519795807;
-  camera_Matrix_.at<double>(1,1)=226.15002947047415;
-  camera_Matrix_.at<double>(0,2)=173.6470807871759;
-  camera_Matrix_.at<double>(2,0)=133.73271487507847;
-  // camera_Matrix_.at<float>(2,2)=1.;
+  camera_Matrix_.at<double>(0,0)=camSysPtr_->cam_left_ptr_->K_(0,0);
+  camera_Matrix_.at<double>(1,1)=camSysPtr_->cam_left_ptr_->K_(1,1);
+  camera_Matrix_.at<double>(0,2)=camSysPtr_->cam_left_ptr_->K_(0,2);
+  camera_Matrix_.at<double>(1,2)=camSysPtr_->cam_left_ptr_->K_(1,2);
+  
+  // camera_Matrix_.at<double>(0,0)=265.6617933577017;
+  // camera_Matrix_.at<double>(0,2)=319.8698844146049;
+  // camera_Matrix_.at<double>(1,1)=266.4702545643292;
+  // camera_Matrix_.at<double>(1,2)=180.63605031607855;
   ROS_INFO("statring loopdetecor");
-
+  bkfIns_=false;
 }
 
 dl::~dl(){
@@ -56,9 +49,12 @@ dl::~dl(){
 }
 
 void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
+   //cout<<bkfIns_<<endl;
+   //if(!bkfIns_) return ;
     cv_bridge::CvImagePtr img ;
   try
   {
+      //cout<<"image received after detecting keyframe inserted"<<endl;
       img=cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::MONO8);
   }
   catch(const cv_bridge::Exception& e)
@@ -86,43 +82,38 @@ void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
    mSudaro_.insert(std::make_pair(size_lc,t_lc));
    
    bool detection=loopdetect(kps_,desc_,Dresult);
-   
-   if(detection){
-      cv::Mat outImageQ,outImageM;
+   if(detection){   
+      //cv::Mat outImageQ,outImageM;
       Eigen::Matrix4d t_rel;
-      t_rel = calculateRelativePose(m_image_keys[Dresult.match],m_image_keys[Dresult.query]);  
-       //std::vector<cv::DMatch> fmatches; 
-       //cv::Ptr<cv::DescriptorMatcher> matcher ;//=cv::DescriptorMatcher::create()
-       //cv::DescriptorMatcher Matcher;
-      //  matcher.knnMatch(m_image_descriptors[Dresult.match],m_image_descriptors[Dresult.query],fmatches);
-       //matcher->match(m_image_descriptors[Dresult.match],m_image_descriptors[Dresult.query],fmatches);
-      //cv::Mat img_matches;
+      t_rel = calculateRelativePose(m_image_keys[Dresult.match],m_image_keys[Dresult.query],Dresult.match,Dresult.query);  
+      //std::vector<cv::DMatch> fmatches; 
+      // cv::Ptr<cv::DescriptorMatcher> matcher ;//=cv::DescriptorMatcher::create()  
+      // matcher->match(m_image_descriptors[Dresult.match],m_image_descriptors[Dresult.query],fmatches);
+      // cv::Mat img_matches;
       // cv::drawMatches(images_[Dresult.match],m_image_keys[Dresult.match],images_[Dresult.query],m_image_keys[Dresult.query],fmatches,img_matches);
         
-      if( std::fabs (t_rel(0,0) * t_rel(1,1) * t_rel(2,2)-1 )<0.2 )
-      {
+      // if( std::fabs (t_rel(0,0) * t_rel(1,1) * t_rel(2,2)-1 )<0.2 )
+      // {
         // std::cout<<t_rel<<std::endl;
-        //  cv::drawKeypoints(images_[Dresult.query],m_image_keys[Dresult.query],outImageQ);
-        //  cv::drawKeypoints(images_[Dresult.match],m_image_keys[Dresult.match],outImageM);
-      
+        /*draw keypoints */
+        // cv::drawKeypoints(images_[Dresult.query],m_image_keys[Dresult.query],outImageQ);
+        // cv::drawKeypoints(images_[Dresult.match],m_image_keys[Dresult.match],outImageM);
       
         // std::stringstream ss;
-        //  std::stringstream ss2;
-        //        ss.str(std::string());
-        //        ss << "/tmp/log1140" << std::setfill('0') << std::setw(1) <<Dresult.match<< ".png";
-        //        cv::imwrite(ss.str(),outImageQ);
-        //        ss2 << "/tmp/log1240" << std::setfill('0') << std::setw(1) <<Dresult.match<< ".png";
-        //        cv::imwrite(ss2.str(),outImageM);
-      }
-      else return;
-      // std::cout<<"t_rel =="<<t_rel<<"\t";
+        // std::stringstream ss2;
+        // ss.str(std::string());
+        // ss << "/tmp/log1140" << std::setfill('0') << std::setw(1) <<Dresult.match<< ".png";
+        // cv::imwrite(ss.str(),outImageQ);
+        // ss2 << "/tmp/log1240" << std::setfill('0') << std::setw(1) <<Dresult.match<< ".png";
+        // cv::imwrite(ss2.str(),outImageM);
+      // }
+      //else return;
+      //  std::cout<<"t_rel =="<<t_rel<<"\t";
        if (t_rel.determinant()<=0) ROS_INFO("maybe we havn't get the full result");
        else {
         ros::Time t_pub=mSudaro_.find(Dresult.match)->second;
         publishPose(t_rel,t_pub);
-       }
-      
-    
+       }   
   }
   
     while (images_.size()>image_total_length)
@@ -130,13 +121,19 @@ void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
         auto it =images_.begin();
         images_.erase(it);
     }   
-
-// publishMap(img->image);
-// VLOG(1)<<"publish map \n ";//verbose
+    bkfIns_=false;
+  // publishMap(img->image);
+  // VLOG(1)<<"publish map \n ";//verbose
 
 
 }//image callback
 
+void dl::KeyframeInsertionCallback(const std_msgs::BoolConstPtr & msg){
+  //cout<<"if keyframe has been inserted"<<msg->data<<endl;
+  
+  if(msg->data) bkfIns_=true;
+  //else bkfIns_=false;
+}
 /**
  @brief extract image keypoints and compute descriptors with ORB 
 */
@@ -202,7 +199,7 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
             
             // get the best candidate (maybe match)
             match.match = ile_.best_entry;
-            //cout<<"best candidate ="<<match.match<<"\n query_id"<<match.query;
+            // cout<<"best candidate ="<<match.match<<"\n query_id"<<match.query;
             
   
             if(entry_id-ile_.best_entry< 10 ) { 
@@ -219,7 +216,7 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
                   if(loopdetection) {
                     match.status=LOOPDETECTED;
                     
-                    //  cout<<"[ Result ]best candidate ="<<match.match<<"\n entry_id = "<<match.query;
+                     //cout<<"[ Result ]best candidate ="<<match.match<<"\n entry_id = "<<match.query;
                 
               }
               else match.status=NO_GEOMETRY_CONSISTENCY;
@@ -467,15 +464,13 @@ bool dl::isGeometricallyConsistent_Flann
       
       old_points.push_back(old_k.pt);
       cur_points.push_back(cur_k.pt);
-    }
-    
+    } 
     cv::Mat oldMat(old_points.size(), 2, CV_32F, &old_points[0]);
     cv::Mat curMat(cur_points.size(), 2, CV_32F, &cur_points[0]);
     return true;
-    //  return fsolver_.checkFundamentalMat(oldMat, curMat, 
-      //  2.0, 12,0.99, 500);      
+      //return fsolver_.checkFundamentalMat(oldMat, curMat, 
+        //2.0, 12,0.99, 500);      
   }
-  
   return false;
 }
 
@@ -584,12 +579,12 @@ image_pub.publish(msg);
 Eigen::Matrix4d dl::calculateRelativePose(
   //const cv::Mat & essentialMat,
   const std::vector<cv::KeyPoint> &kps1,
-  const std::vector<cv::KeyPoint> &kps2
-  
+  const std::vector<cv::KeyPoint> &kps2,
+  const int &e_id,const int &q_id  
 ){
   std::vector<cv::Point2f> pp1;
   std::vector<cv::Point2f> pp2;
-
+  assert(!kps1.empty()&& !kps2.empty());
   int min_points=std::min(kps1.size(),kps2.size());
   
     for(int i=0;i<min_points;i++){
@@ -598,39 +593,127 @@ Eigen::Matrix4d dl::calculateRelativePose(
     }
   
   //   //todo find camera matrix 
-  
-
   // // <<226.38018519795807, 0.0, 173.6470807871759, 0.0, 226.15002947047415, 133.73271487507847, 0, 0, 1;//=&K_;
   // // cameraMatrix.
   cv::Mat R,t,mask,ff;//inliners;
   std::vector<uchar>inliners;
-  ff=cv::findFundamentalMat(pp1,pp2,inliners,cv::RANSAC);
-  int ptrueSize=pp1.size()-inliners.size();
+#ifdef LOOPDETECTOR_LOG
+
+  cv::BFMatcher n;
+  std::vector<cv::DMatch> matches;
+  n.match(m_image_descriptors[e_id],m_image_descriptors[q_id],matches);    
+  // if(false){
+#ifdef LOOPDETECTOR_IMG_LOG
+
+    cv::Mat output;
+    std::stringstream name;
+    std::cout<<"heavent take ransac test"<<std::endl;
+    cv::drawMatches(images_[e_id],kps1,images_[q_id],kps2,matches,output);
+    name<<"/tmp/"<<e_id<<"output"<<".png";
+    cv::imwrite(name.str(),output);
+
+  // }
+#endif
+#endif
+
+  ff=cv::findFundamentalMat(pp1,pp2,inliners,cv::RANSAC,1.0,0.99);
+  // int ptrueSize=pp1.size()-inliners.size();
+  // std::cout<<ff.cols<<"\t "<<ff.rows<<std::endl;
+  cv::Mat F2e=camera_Matrix_.t() * ff * camera_Matrix_;
+
   std::vector<cv::Point2f> inl1;
   std::vector<cv::Point2f>  inl2;
-  
-  for (int i ,lainaCount= 0; i < pp1.size(); i++)
-  {
+  // std::vector<cv::KeyPoint> kps1_r;
+  // std::vector<cv::KeyPoint> kps2_r;
+
+  //std::vector<cv::DMatch> match_r;
+  // assert(kps1.size()==kps2.size());
+  int lowb=std::min(kps1.size(),kps2.size());
+  for (int i = 0; i < lowb; i++)
+  { 
     if(inliners[i]!=0){
       inl1.push_back(cv::Point2f(pp1[i]));
       inl2.push_back(cv::Point2f(pp2[i]));
+      //match_r.push_back(matches[i]);
     }
     
-  } 
+  }
+//#ifdef LOOPDETECTOR_LOG
+#ifdef LOOPDETECTOR_IMG_LOG
+  if(false){
+    cv::Mat output;
+    std::stringstream name;
+    std::cout<<"have take ransac test"<<match_r.size()<<std::endl;
+    cv::drawMatches(images_[e_id],kps1,images_[q_id],kps2,match_r,output);
+    name<<"/tmp/"<<e_id<<"output"<<".png";
+    cv::imwrite(name.str(),output);
+  }
+#endif
+//#endif 
+  // cv::Mat u,w,vt;
+  // cv::SVD::compute(F2e,w,u,vt);
+  // // u.col(2).copyTo(t);
+
+  // // t=t/cv::norm(t);
+  // cv::Mat W(3, 3,CV_64F,cv::Scalar(0));
+
+  // W.at<double>(0,1)=-1.;
+  // W.at<double>(1,0)=1.;
+  // W.at<double>(2,2)=1.;
+
+  // R=u * W *vt;
+
+  // std::cout<<R<<"\t "<<t<<"\n ";
+
   cv::Mat E =cv::findEssentialMat(inl1,inl2,camera_Matrix_,cv::RANSAC,0.999,1.0,mask);
+  
   // cv::Mat fake_E=camera_Matrix_.t()  * ff *camera_Matrix_;
+  // std::cout<<"------------- "<<inl1.size()<<"\n";
+  if(E.rows>3 ||E.empty()){
+    std::cout<<"canot calcaute Essesntial Matrix "; 
+  }
+  // cv::recoverPose(F2e,inl1,inl2,camera_Matrix_,R,t);
   cv::recoverPose(E,inl1,inl2,camera_Matrix_,R,t);
   
-  for(int i=0;i<inl1.size();i++){
-    cv::Mat y1 =(cv::Mat_<double>(3,1)<<inl1[i].x,inl1[i].y,1);
-    cv::Mat y2 =(cv::Mat_<double>(3,1)<<inl2[i].x,inl2[i].y,1);
-    
-    cv::Mat t_x=cv::Mat_<double>(3,3)<<(0,-t.at<double>(0,2),t.at<double>(1,0),
-                                      t.at<double>(2,0), 0, -t.at<double>(0,0),
-                                      -t.at<double>(1,0),t.at<double>(0,0),0);
-    cv::Mat d =y2.t() * camera_Matrix_.inv() * t_x * R  * camera_Matrix_.inv() * y1;
-    // std::cout<<"eppolar constraint =="<<d<<std::endl;
-  }
+  // std::cout<<R<<"\t "<<t<<std::endl;
+
+  // cv::Mat P1=(cv::Mat_<double>(3,4)<<1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.);
+  // cv::Mat P2=(cv::Mat_<double>(3,4)<<
+  //     R.at<double>(0,0),R.at<double>(0,1),R.at<double>(0,2),t.at<double>(0,0),
+  //     R.at<double>(1,0),R.at<double>(1,1),R.at<double>(1,2),t.at<double>(1,0),
+  //     R.at<double>(2,0),R.at<double>(2,1),R.at<double>(2,2),t.at<double>(2,0)
+  //     );
+  
+  //   P1  =camera_Matrix_* P1;
+  //   P2  =camera_Matrix_  * P2;
+
+  //   cv::Mat ttl =cv::Mat(4,1,CV_64F);
+
+  //   cv::triangulatePoints(P1,P2,inl1,inl2,ttl);
+  //   ttl.at<double>(1,0) /= ttl.at<double>(3,0);
+  //   ttl.at<double>(2,0) /= ttl.at<double>(3,0);  
+  //   ttl.at<double>(3,0) /= ttl.at<double>(3,0);
+  //   // std::cout<<"ttL==="<<ttl<<std::endl;
+  //   // std::cout<<"\n \n \n ";
+  //   // std::cout<<"what is a ttl"<<ttl.size()<<std::endl;
+
+  //   for(int i=0;i<ttl.cols;i++){
+  //     cv::Mat x=ttl.col(i).clone();
+  //     // x=x /x.at<double>(3,0);
+  //     cv::Point3d p(x.at<double>(0,0),x.at<double>(1,0),x.at<double>(2,0));
+  //     std::cout<<"triangulated points =="<<p<<std::endl;
+  //   }
+
+  // for(int i=0;i<inl1.size();i++){
+  //   cv::Mat y1 =(cv::Mat_<double>(3,1)<<inl1[i].x,inl1[i].y,1);
+  //   cv::Mat y2 =(cv::Mat_<double>(3,1)<<inl2[i].x,inl2[i].y,1);
+  //   cv::Mat t_x=cv::Mat_<double>(3,3)<<(0,-t.at<double>(0,2),t.at<double>(1,0),
+  //                                     t.at<double>(2,0), 0, -t.at<double>(0,0),
+  //                                     -t.at<double>(1,0),t.at<double>(0,0),0);
+  //   cv::Mat d =y2.t() * camera_Matrix_.inv() * t_x * R  * camera_Matrix_.inv() * y1;
+      
+  //   std::cout<<"eppolar constraint =="<<d<<std::endl;
+  // }
   
   Eigen::Matrix3d Reg;
   Eigen::Vector3d teg;
@@ -647,6 +730,7 @@ Eigen::Matrix4d dl::calculateRelativePose(
 
 void dl::publishPose( Eigen::Matrix4d & tcw,const ros::Time &t_lc)
 { 
+  //std::cout<<"publish relative Pose"<<std::endl;
   geometry_msgs::PoseStampedPtr ps_ptr(new geometry_msgs::PoseStamped());
   ps_ptr->header.stamp = t_lc;
   ps_ptr->header.frame_id = "lc";
