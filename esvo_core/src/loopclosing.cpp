@@ -50,11 +50,11 @@ dl::~dl(){
 
 void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
    //cout<<bkfIns_<<endl;
-   //if(!bkfIns_) return ;
+  if(!bkfIns_) return ;
     cv_bridge::CvImagePtr img ;
   try
   {
-      //cout<<"image received after detecting keyframe inserted"<<endl;
+      cout<<"image received after detecting keyframe inserted"<<endl;
       img=cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::MONO8);
   }
   catch(const cv_bridge::Exception& e)
@@ -64,7 +64,13 @@ void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
   } 
   // img->image.convertTo(img->image,CV_8UC1);
   images_.push_back(img->image);
-
+  if(1){
+  int id=images_.size()-1;
+  std::stringstream ss;
+  ss<<"/tmp/"<<id<<"now.png";
+  cv::imwrite(ss.str(),img->image);
+  }
+    
   // ROS_INFO("LOADING IMAGE number %d ! ",NUM_IMAGE);
 
    if(img->image.empty()) ROS_ERROR("CANNOT GET IMAGES ");
@@ -202,7 +208,7 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
             // cout<<"best candidate ="<<match.match<<"\n query_id"<<match.query;
             
   
-            if(entry_id-ile_.best_entry< 10 ) { 
+            if(entry_id-ile_.best_entry< 25 ) { 
               match.status =MATCH_TOO_CLOSE;
               return false;
               }
@@ -215,9 +221,7 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
                 loopdetection=isGeometricallyConsistent_Flann(ile_.best_entry,kps,descriptors,flann);
                   if(loopdetection) {
                     match.status=LOOPDETECTED;
-                    
-                     //cout<<"[ Result ]best candidate ="<<match.match<<"\n entry_id = "<<match.query;
-                
+                     cout<<"[ Result ]best candidate ="<<match.match<<"\n entry_id = "<<match.query;
               }
               else match.status=NO_GEOMETRY_CONSISTENCY;
             }else match.status=NO_TEMPORAL_CONSISTENCY;
