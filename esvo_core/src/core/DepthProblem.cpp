@@ -11,9 +11,14 @@ DepthProblem::DepthProblem(
   dpConfigPtr_(dpConfig_ptr),
   camSysPtr_(camSysPtr)
 {
-
+  std::string  resdir="/tmp/res.txt";
+  file.open(resdir.c_str(),std::ofstream::out);
+  file<<std::fixed;
 }
-
+DepthProblem::~DepthProblem(){
+  file.close();
+  // LOG(INFO)<<"save residual in /tmp \n";
+}
 void DepthProblem::setProblem(
   Eigen::Vector2d & coor,
   Eigen::Matrix<double, 4, 4> & T_world_virtual,
@@ -59,7 +64,7 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
     return numValid;
   }
 
-  Eigen::MatrixXd tau1, tau2;
+  Eigen::MatrixXd tau1, tau2;//图 1 ts； 图 2 
   if (patchInterpolation(pStampedTsObs_->second.TS_left_, x1_s, tau1)
     && patchInterpolation(pStampedTsObs_->second.TS_right_, x2_s, tau2))
   {
@@ -71,6 +76,7 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
         {
           size_t index = y * wx + x;
           fvec[index] = tau1(y,x) - tau2(y,x);
+          //LOG(INFO)<<"depth Problem Q"<<fvec[index]<<"\n";
         }
     }
     else if(strcmp(dpConfigPtr_->LSnorm_.c_str(), "zncc") == 0)
@@ -83,6 +89,8 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
           tools::meanStdDev(tau1, mu1, sigma1);
           tools::meanStdDev(tau2, mu2, sigma2);
           fvec[index] = ((tau1(y,x) - mu1) / sigma1 - (tau2(y,x) - mu2) / sigma2) / sqrt(patchSize);
+          //LOG(INFO)<<"depth Problem Q "<<fvec[index]<<"\n";
+          // std::cout<<fvec[index]<<"\n";
         }
     }
     else if(strcmp(dpConfigPtr_->LSnorm_.c_str(), "Tdist") == 0)
@@ -112,6 +120,7 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
             if (vResidual[index] != 0)
               sum_scaleSquared += vResidualSquared[index] * (dpConfigPtr_->td_nu_ + 1) /
                               (dpConfigPtr_->td_nu_ + vResidualSquared[index] / scaleSquaredTmp1);
+            // file <<vResidual[index]<<"\t";
           }
         }
         if(sum_scaleSquared == 0)
@@ -131,6 +140,12 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
           size_t index = y * wx + x;
           double weight = (dpConfigPtr_->td_nu_ + 1) / (dpConfigPtr_->td_nu_ + vResidualSquared[index] / scaleSquaredTmp2);
           fvec[index] = sqrt(weight) * vResidual[index];
+          
+          // std::cout<<fvec[index]<<"\n";
+          if(tau1(y,x)==0 && tau2(y,x)==0)
+          // file << fvec[index]<<" ";
+          ;
+          else file<< fvec[index]<<" "; 
         }
       }
     }
@@ -138,7 +153,7 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
       exit(-1);
     numValid = 1;
   }
-  else
+  else//点快要出界了
   {
     if(strcmp(dpConfigPtr_->LSnorm_.c_str(), "l2") == 0)
       for(size_t i = 0; i < patchSize; i++)
@@ -152,13 +167,21 @@ int DepthProblem::operator()( const Eigen::VectorXd &x, Eigen::VectorXd & fvec )
         double residual = 255;
         double weight = (dpConfigPtr_->td_nu_ + 1) / (dpConfigPtr_->td_nu_ + std::pow(residual / dpConfigPtr_->td_scale_, 2));
         fvec[i] = sqrt(weight) * residual;
+        // std::cout<<fvec[i]<<"\n";
       }
     else
       exit(-1);
   }
   return numValid;
 }
-
+/**
+ * @return 应该是是否在patch中
+ * @param x left image plane 2d
+ * @param d inv_depth value for 2d point x
+ * @param T_left_virtual transformation for left according to  virtual 
+ * @param x1_s in left dvs_image plane 
+ * @param x2_s in right dvs_image plane 
+**/
 bool DepthProblem::warping(
   const Eigen::Vector2d &x,
   double d,
@@ -166,7 +189,7 @@ bool DepthProblem::warping(
   Eigen::Vector2d &x1_s,
   Eigen::Vector2d &x2_s) const
 {
-  // back-project to 3D
+  // back-project to 3D  这里大概会投到中心去 即virtual plane 而不是根据left_ptr的左目上
   Eigen::Vector3d p_rv;
   camSysPtr_->cam_left_ptr_->cam2World(x, d, p_rv);
   // transfer to left DVS coordinate
@@ -178,7 +201,7 @@ bool DepthProblem::warping(
     camSysPtr_->cam_right_ptr_->P_.block<3, 1>(0, 3);
   x1_s = x1_hom.block<2, 1>(0, 0) / x1_hom(2);
   x2_s = x2_hom.block<2, 1>(0, 0) / x2_hom(2);
-
+    
   int wx = dpConfigPtr_->patchSize_X_;
   int wy = dpConfigPtr_->patchSize_Y_;
   int width  = camSysPtr_->cam_left_ptr_->width_;
@@ -250,14 +273,24 @@ bool DepthProblem::patchInterpolation(
     }
     return false;
   }
+  //先从image x1_s 的 (wx+1) * (wy+1) 位置开始截
   Eigen::MatrixXd SrcPatch = img.block(SrcPatch_UpLeft[1], SrcPatch_UpLeft[0], wy2, wx2);
-
+  
   // Compute R, size (wy+1) * wx.
   Eigen::MatrixXd R;
   R = q1 * SrcPatch.block(0, 0, wy2, wx) + q2 * SrcPatch.block(0, 1, wy2, wx);
 
   // Compute F, size wy * wx.
   patch = q3 * R.block(0, 0, wy, wx) + q4 * R.block(1, 0, wy, wx);
+  if (debug) {
+    LOG(INFO) << ", location: " << location.transpose() << "\n";
+    for (int i=0;i<patch.rows();i++){
+      for (int j=0;j<patch.cols();j++){
+        std::cout<<patch(i,j)<<" ";
+      }
+      std::cout<<"\n";
+    }
+  }
   return true;
 }
 

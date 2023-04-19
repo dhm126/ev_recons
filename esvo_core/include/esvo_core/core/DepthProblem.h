@@ -40,8 +40,8 @@ struct DepthProblemConfig
 
   size_t patchSize_X_, patchSize_Y_;
   std::string LSnorm_;
-  double td_nu_;
-  double td_scale_;
+  double td_nu_;//mean
+  double td_scale_;//s
   double td_scaleSquared_;// td_scale_^2
   double td_stdvar_;// sigma
   size_t MAX_ITERATION_;
@@ -56,7 +56,7 @@ struct DepthProblem : public optimization::OptimizationFunctor<double>
   DepthProblem(
     const DepthProblemConfig::Ptr & dpConfig_ptr,
     const CameraSystem::Ptr & camSysPtr );
-
+  ~DepthProblem();
   void setProblem(
     Eigen::Vector2d & coor,
     Eigen::Matrix<double, 4, 4> & T_world_virtual,
@@ -87,6 +87,9 @@ struct DepthProblem : public optimization::OptimizationFunctor<double>
   std::vector<Eigen::Matrix<double, 3, 4>,
     Eigen::aligned_allocator<Eigen::Matrix<double, 3, 4> > > vT_left_virtual_;
   StampedTimeSurfaceObs* pStampedTsObs_;
+
+  //log book 
+  mutable std::ofstream file;
 };
 }
 }

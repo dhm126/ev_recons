@@ -1,0 +1,18 @@
+<launch>
+<!--<rosparam param="/use_sim_time">true</rosparam>-->
+
+  <!-- Time surfaces generation -->
+  <node name="ep_events_left" pkg="esvo_core" type="esvo_eventProvider">
+    <remap from="ep/events" to="/davis/left/events" />
+    <param name ="hdf5FileName" value="/media/zhouyum/NN/loop-floor0-events_left.hdf">
+    <param name ="sensor_height" value="720">
+    <param name ="sensor_width" value="1280">
+  </node>
+
+  <node name="ep_events_right" pkg="esvo_core" type="esvo_eventProvider">
+    <remap from="ep/events" to="/davis/right/events" />
+    <param name ="hdf5FileName" value="/media/zhouyum/NN/loop-floor0-events_right.hdf">
+    <param name ="sensor_height" value="720">
+    <param name ="sensor_width" value="1280">
+  </node>
+</launch>

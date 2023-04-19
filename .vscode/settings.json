@@ -79,6 +79,8 @@
         "typeinfo": "cpp",
         "valarray": "cpp",
         "core": "cpp",
-        "numericaldiff": "cpp"
+        "numericaldiff": "cpp",
+        "eigen": "cpp",
+        "dense": "cpp"
     }
 }

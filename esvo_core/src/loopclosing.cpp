@@ -35,26 +35,24 @@ dl::dl(
   camera_Matrix_.at<double>(1,1)=camSysPtr_->cam_left_ptr_->K_(1,1);
   camera_Matrix_.at<double>(0,2)=camSysPtr_->cam_left_ptr_->K_(0,2);
   camera_Matrix_.at<double>(1,2)=camSysPtr_->cam_left_ptr_->K_(1,2);
-  
-  // camera_Matrix_.at<double>(0,0)=265.6617933577017;
-  // camera_Matrix_.at<double>(0,2)=319.8698844146049;
-  // camera_Matrix_.at<double>(1,1)=266.4702545643292;
-  // camera_Matrix_.at<double>(1,2)=180.63605031607855;
+  voc_score.open("/tmp/vocScore.txt", std::ofstream::out);
   ROS_INFO("statring loopdetecor");
   bkfIns_=false;
 }
 
 dl::~dl(){
+  voc_score.close();
   image_pub.shutdown();
 }
 
 void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
    //cout<<bkfIns_<<endl;
+  
   if(!bkfIns_) return ;
     cv_bridge::CvImagePtr img ;
   try
   {
-      cout<<"image received after detecting keyframe inserted"<<endl;
+      //cout<<"image received after detecting keyframe inserted"<<endl;
       img=cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::MONO8);
   }
   catch(const cv_bridge::Exception& e)
@@ -64,7 +62,7 @@ void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
   } 
   // img->image.convertTo(img->image,CV_8UC1);
   images_.push_back(img->image);
-  if(1){
+  if(false){
   int id=images_.size()-1;
   std::stringstream ss;
   ss<<"/tmp/"<<id<<"now.png";
@@ -88,6 +86,7 @@ void dl::accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg){
    mSudaro_.insert(std::make_pair(size_lc,t_lc));
    
    bool detection=loopdetect(kps_,desc_,Dresult);
+   
    if(detection){   
       //cv::Mat outImageQ,outImageM;
       Eigen::Matrix4d t_rel;
@@ -164,7 +163,6 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
   match.query=entry_id;
   if(my_voc_.empty()){
   ROS_ERROR("VOCALBULARY CHECK FAILED ");
-
   }
   my_database_.getVocabulary()->transform(descriptors,bowec);
   
@@ -174,17 +172,28 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
   
   my_database_.add(bowec,fvec);
   
+  // if(entry_id<100) {
+  //   cout<<"at the beginging we won't take visual place recognition"<<endl;
+  //   return false;
+  //   }
+
   //存在能用的qr
   if(!qr.empty()){
     double scoreof2=1.;
     //double maxScore_=0.;
     scoreof2=my_database_.getVocabulary()->score(bowec,last_bowvec_);
-  
-    maxScore_=maxScore_>scoreof2?maxScore_:scoreof2;
-     
-    if (scoreof2>maxScore_*0.7){
+    if(!voc_score.is_open())
+  {
+    LOG(INFO) << "File at /tmp/vocScore is not opened, save trajectory failed.";
+    exit(-1);
+  }
+    voc_score << std::fixed;
+    //std::cout<<"cur score = "<<scoreof2<<" \n";
+    maxScore_=std::max(scoreof2,maxScore_);
+     voc_score<<scoreof2<<std::endl;
+    if (scoreof2>maxScore_*0.5){
       //todo::the lowest score threshold 
-     removeLowsocres(qr, double (maxScore_*0.5));
+     removeLowsocres(qr, double (maxScore_*0.2));
      
      //防止remove掉所有的qr 不过一般不可能
      if (!qr.empty())
@@ -206,9 +215,8 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
             // get the best candidate (maybe match)
             match.match = ile_.best_entry;
             // cout<<"best candidate ="<<match.match<<"\n query_id"<<match.query;
-            
-  
-            if(entry_id-ile_.best_entry< 25 ) { 
+           
+            if(entry_id-ile_.best_entry< 15 ) { 
               match.status =MATCH_TOO_CLOSE;
               return false;
               }
@@ -222,6 +230,7 @@ bool dl::loopdetect(const std::vector<cv::KeyPoint> &kps ,const cv::Mat &descrip
                   if(loopdetection) {
                     match.status=LOOPDETECTED;
                      cout<<"[ Result ]best candidate ="<<match.match<<"\n entry_id = "<<match.query;
+                     voc_score<<std::endl<<"candidate "<<match.match<<"entry id "<<match.query<<std::endl; 
               }
               else match.status=NO_GEOMETRY_CONSISTENCY;
             }else match.status=NO_TEMPORAL_CONSISTENCY;

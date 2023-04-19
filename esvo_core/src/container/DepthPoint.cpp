@@ -168,7 +168,7 @@ DepthPoint::update(
   }
   boundVariance();
 }
-
+//baysien depth filter eq.12a 12b 12c 12d
 void
 DepthPoint::update_studentT(double invDepth, double scale2, double variance, double nu)
 {
@@ -207,7 +207,8 @@ DepthPoint::p_cam() const
 
 const Eigen::Vector3d &
 DepthPoint::p_world() const {
-  
+
+  //Eigen::Vector3d tmp=T_world_cam_.block<3,3>(0,0) * p_cam_+T_world_cam_.block<3,1>(0,3);
   return p_world_;
 }
 void 
@@ -215,6 +216,10 @@ DepthPoint::update_p_world(){
 
   p_world_ = T_world_cam_.block<3,3>(0,0) * p_cam_+T_world_cam_.block<3,1>(0,3);
   
+}
+void 
+DepthPoint::setP_world(const Eigen::Vector3d& v3d){
+  p_world_=v3d;
 }
 void
 DepthPoint::updatePose(Eigen::Matrix<double, 4, 4> &T_world_cam)

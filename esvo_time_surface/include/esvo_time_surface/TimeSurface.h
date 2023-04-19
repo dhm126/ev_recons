@@ -141,7 +141,7 @@ private:
   ros::Subscriber camera_info_sub_;
   ros::Subscriber sync_topic_;
   image_transport::Publisher time_surface_pub_;
-  int iCount; 
+  long long iCount; 
   int f_print_;
   bool gaodianPictures(const ros::Time &time,cv::Mat &image,int cishu,bool print);
   // online parameters

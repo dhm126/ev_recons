@@ -59,6 +59,7 @@ class DepthPoint
 
   void update_p_cam(const Eigen::Vector3d &p);
   void update_p_world();
+  void setP_world(const Eigen::Vector3d & v_3d);
   const Eigen::Vector3d &p_cam() const;
   const Eigen::Vector3d &p_world()const;
   void updatePose(Eigen::Matrix<double, 4, 4> &T_world_cam);// used in the fusion of each newly estimate.

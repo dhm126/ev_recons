@@ -23,15 +23,17 @@ Visualization::plot_map(
   size_t width = depthMapPtr->cols();
   img = cv::Mat(cv::Size(width, height), CV_8UC1, cv::Scalar(0));
   cv::cvtColor(img, img, CV_GRAY2BGR);
-
+  
   switch(vmType)
   {
     case InvDepthMap:
     {
+      
       for (auto it = depthMapPtr->begin(); it != depthMapPtr->end(); it++)
       {
         if (it->valid() && it->variance() < pow(visualization_threshold1, 2)
             && it->age() >= (int) visualization_threshold2)
+          
           DrawPoint(it->invDepth(), max_range, min_range, it->x(), img);
       }
       break;

@@ -1,0 +1,10 @@
+<launch>
+    <!-- ROS BAG -->
+    <rosparam param="/use_sim_time">true</rosparam>
+    <node pkg="rosbag" type="play" name="play" output="screen" required="true"
+
+     args="/media/zhouyum/SH/hesuan/bic_edited2.bag -r 0.5 --clock" />
+      
+     <!-- MODIFY THE ABOVE DIRECTORY -->
+     <include file="$(find esvo_time_surface)/launch/rosbag_launcher/simu_njust/njust_calib_info.launch" />
+</launch>

@@ -56,7 +56,21 @@ bool FSolver::checkFundamentalMat(const cv::Mat &P1, const cv::Mat &P2,
     cv::Mat F = findFundamentalMat(P1, P2, reprojection_error, min_points,
     NULL, true, p, max_its);
     if (!F.empty()) {
+      cv::Mat u,v,w;
+      cv::Mat R,t;
+      cv::SVD::compute(F,w,u,v);
+      u.col(2).copyTo(t);
+      t=t/cv::norm(t);
+      cv::Mat W(3, 3,CV_64F,cv::Scalar(0));
+
+      w.at<double>(0,1)=-1.;
+      w.at<double>(1,0)=1.;
+      w.at<double>(2,2)=1.;
+
+        R=u * W *v;
+      std::cout<<t<<std::endl;
       // std::cout<<"fundamental matrix =="<<F<<std::endl;
+      
       return true ;
     }
     else return false;

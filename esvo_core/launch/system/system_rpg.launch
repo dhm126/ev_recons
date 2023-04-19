@@ -30,7 +30,7 @@
 
 	<!-- Mapping node -->
 	<!-- launch-prefix="gdb -ex run -\-args" -->
-	<node name="esvo_Mapping" pkg="esvo_core" type="esvo_Mapping" output="screen" required="true">
+	<node name="esvo_Mapping" pkg="esvo_core" type="esvo_Mapping" output="screen" required="true" >
 		<remap from="time_surface_left" to="/TS_left" />
 		<remap from="time_surface_right" to="/TS_right" />
 		<remap from="stamped_pose" to="/esvo_tracking/pose_pub" />
@@ -59,10 +59,15 @@
 
     <rosparam command="load" file="$(find esvo_core)/cfg/tracking/tracking_rpg.yaml" />
 	</node>
-
+  <!---->
+  <node name="esvo_loopclosing" pkg="esvo_core" type ="esvo_loopclosing" output="screen" required="true" >
+    <!--<remap from="KeyFrameIns" to="/KeyFrameIns"/> 
+    <remap from="AccumulatedEvents" to="/davis/left/image" />-->
+    <rosparam param="calibInfoDir" subst_value="true">$(arg calibInfoDirStr)</rosparam>
+  </node> 
 	<!-- Visualization -->
 	<node pkg="rqt_gui" type="rqt_gui" name="rqt_gui"
     args="--perspective-file $(find esvo_core)/esvo_system.perspective" />
-	<node pkg="rviz" type="rviz" name="rviz"
-    args="-d $(find esvo_core)/esvo_system.rviz" />
+	<!--<node pkg="rviz" type="rviz" name="rviz"
+    args="-d $(find esvo_core)/esvo_system.rviz" /> -->
 </launch>

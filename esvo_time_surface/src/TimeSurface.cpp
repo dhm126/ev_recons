@@ -36,8 +36,8 @@ TimeSurface::TimeSurface(ros::NodeHandle & nh, ros::NodeHandle nh_private)
     pEventQueueMat_->clear();
   sensor_size_ = cv::Size(0,0);
 
-  int iCount;
-  int f_print;
+  iCount=0;
+  f_print_=0;
   bool print=false;
 }
 
@@ -61,7 +61,7 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
 
   if(!bSensorInitialized_ || !bCamInfoAvailable_)
     return;
-
+  
   // create exponential-decayed Time Surface map.
   const double decay_sec = decay_ms_ / 1000.0;
   cv::Mat time_surface_map;
@@ -124,7 +124,8 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
       } // a most recent event is available
     }// loop x
   }// loop y
-
+  
+  // cv::normalize(time_surface_map,time_surface_map,1,0,cv::NORM_MINMAX);
   // polarity
   if(!ignore_polarity_)
     time_surface_map = 255.0 * (time_surface_map + 1.0) / 2.0;
@@ -137,6 +138,7 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
     cv::medianBlur(time_surface_map, time_surface_map, 2 * median_blur_kernel_size_ + 1);
 
   // Publish event image
+  
   static cv_bridge::CvImage cv_image;
   cv_image.encoding = "mono8";
   cv_image.image = time_surface_map.clone();
@@ -147,7 +149,6 @@ void TimeSurface::createTimeSurfaceAtTime(const ros::Time& external_sync_time)
     
     time_surface_pub_.publish(cv_image.toImageMsg());
   }
-
   if (time_surface_mode_ == BACKWARD && bCamInfoAvailable_ && time_surface_pub_.getNumSubscribers() > 0)
   {
     cv_bridge::CvImage cv_image2;
@@ -303,15 +304,21 @@ void TimeSurface::syncCallback(const std_msgs::TimeConstPtr& msg)
     sync_time_ = ros::Time::now();
   else
     sync_time_ = msg->data;
-
+    
 #ifdef ESVO_TS_LOG
     TicToc tt;
     tt.tic();
 #endif
     if(NUM_THREAD_TS == 1)
-      createTimeSurfaceAtTime(sync_time_);
+      {
+        
+        createTimeSurfaceAtTime(sync_time_);
+      }
     if(NUM_THREAD_TS > 1)
-      createTimeSurfaceAtTime_hyperthread(sync_time_);
+      {
+        
+        createTimeSurfaceAtTime_hyperthread(sync_time_);
+      }
 #ifdef ESVO_TS_LOG
     LOG(INFO) << "Time Surface map's creation takes: " << tt.toc() << " ms.";
 #endif
@@ -321,7 +328,7 @@ void TimeSurface::cameraInfoCallback(const sensor_msgs::CameraInfo::ConstPtr& ms
 {
   if(bCamInfoAvailable_)
     return;
-
+  ROS_INFO("1");
   cv::Size sensor_size(msg->width, msg->height);
   camera_matrix_ = cv::Mat(3, 3, CV_64F);
   for (int i = 0; i < 3; i++)
@@ -342,7 +349,7 @@ void TimeSurface::cameraInfoCallback(const sensor_msgs::CameraInfo::ConstPtr& ms
   for (int i = 0; i < 4; i++)
     for (int j = 0; j < 3; j++)
       projection_matrix_.at<double>(cv::Point(i, j)) = msg->P[i+j*4];
-
+  ROS_INFO("killing");
   if(distortion_model_ == "equidistant")
   {
     cv::fisheye::initUndistortRectifyMap(camera_matrix_, dist_coeffs_,
@@ -365,7 +372,7 @@ void TimeSurface::cameraInfoCallback(const sensor_msgs::CameraInfo::ConstPtr& ms
     bCamInfoAvailable_ = false;
     return;
   }
-
+  ROS_INFO("precomputing");
   /* pre-compute the undistorted-rectified look-up table */
   precomputed_rectified_points_ = Eigen::Matrix2Xd(2, sensor_size.height * sensor_size.width);
   // raw coordinates
@@ -410,13 +417,14 @@ void TimeSurface::cameraInfoCallback(const sensor_msgs::CameraInfo::ConstPtr& ms
 void TimeSurface::eventsCallback(const dvs_msgs::EventArray::ConstPtr& msg)
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
-
+  
   if(!bSensorInitialized_)
     init(msg->width, msg->height);
 
   for(const dvs_msgs::Event& e : msg->events)
   {
     events_.push_back(e);
+    
     int i = events_.size() - 2;
     while(i >= 0 && events_[i].ts > e.ts)
     {
@@ -424,7 +432,7 @@ void TimeSurface::eventsCallback(const dvs_msgs::EventArray::ConstPtr& msg)
       i--;
     }
     events_[i+1] = e;
-
+    
     const dvs_msgs::Event& last_event = events_.back();
     pEventQueueMat_->insertEvent(last_event);//events_
   }
@@ -444,21 +452,30 @@ void TimeSurface::clearEventQueue()
 bool TimeSurface::gaodianPictures( const ros::Time &time, cv::Mat  &image ,int cishu,bool print){
   const double t_print=time.toSec();
  if (!print)  return false;
-    
-    if(  int  (t_print)%2==0 ){
-      if (f_print_<3){
+ else {
       std::stringstream ss;
       ss.str(std::string());
-      ss << "/tmp/x_" << std::setfill('0') << std::setw(8) << cishu << ".png";
+      ss << "/tmp/ts_l/x_" << cishu << ".png";
       cv::imwrite(ss.str(),image);
-      std::cout<<"imwrite"<<cishu<<"current_time:"<<t_print<<std::endl;
-      LOG(INFO)<<"saving image to tmp directory";
-      f_print_++;
-      }      else return false;
+      std::cout<<"imwrite"<<cishu<<"\n";
+ }
+ return true;
+    // if(int(t_print)%2==0 ){
+    //   if (f_print_<3){
+    //   std::stringstream ss;
+    //   ss.str(std::string());
+    //   ss << "/tmp/ts_l/x_" << cishu << ".png";
+    //   cv::imwrite(ss.str(),image);
+
+    //   std::cout<<"imwrite"<<cishu<<"current_time:"<<t_print<<std::endl;
+    //   LOG(INFO)<<"saving image to tmp directory";
       
-      }else {f_print_=0;return false;}
+    //   f_print_++;
+    //   }      else return false;
       
- }//gaodian Pictures
+      // }else {f_print_=0;return false;}
+      
+ }
 
 
 } // namespace esvo_time_surface

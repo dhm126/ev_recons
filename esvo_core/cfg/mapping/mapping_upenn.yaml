@@ -1,14 +1,15 @@
-invDepth_min_range: 0.16
-invDepth_max_range: 1.0
+invDepth_min_range: 0.16 #0.16
+invDepth_max_range: 1.0 #1.0 
 residual_vis_threshold: 20
-stdVar_vis_threshold: 0.15
+stdVar_vis_threshold: 0.15 #0.15 
 age_max_range: 10
 age_vis_threshold: 1
 fusion_radius: 0
 FUSION_STRATEGY: "CONST_POINTS" # "CONST_FRAMES"
 maxNumFusionFrames: 10
-maxNumFusionPoints: 2000
+maxNumFusionPoints: 2000 #2000
 Denoising: False
+insertKeyframe: False 
 SmoothTimeSurface: False
 Regularization: False
 bVisualizeGlobalPC: True
@@ -29,7 +30,7 @@ Tdist_stdvar: 59.763
 # EventBM parameters
 BM_half_slice_thickness: 0.001
 BM_min_disparity: 1
-BM_max_disparity: 40
+BM_max_disparity: 40 #40
 BM_step: 1
 BM_ZNCC_Threshold: 0.1
 BM_bUpDownConfiguration: False

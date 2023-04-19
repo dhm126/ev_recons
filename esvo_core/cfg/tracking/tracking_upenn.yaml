@@ -1,5 +1,5 @@
-invDepth_min_range: 0.16
-invDepth_max_range: 1.0
+invDepth_min_range: 0.2
+invDepth_max_range: 2
 TS_HISTORY_LENGTH: 100
 REF_HISTORY_LENGTH: 10
 tracking_rate_hz: 100
@@ -13,6 +13,6 @@ LSnorm: Huber #Huber #l2
 huber_threshold: 50
 MIN_NUM_EVENTS: 1000
 RegProblemType: 1 #( 0 numerical; 1 analytical)
-SAVE_TRAJECTORY: False
+SAVE_TRAJECTORY: True
 PATH_TO_SAVE_TRAJECTORY: "/tmp/" # CHANGE THIS PATH
-VISUALIZE_TRAJECTORY: False
+VISUALIZE_TRAJECTORY: True

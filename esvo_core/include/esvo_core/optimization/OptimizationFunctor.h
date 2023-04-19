@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 #include <Eigen/Eigen>
-
+#include <unsupported/Eigen/NonLinearOptimization>
 namespace esvo_core
 {
 namespace optimization

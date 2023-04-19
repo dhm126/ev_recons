@@ -137,7 +137,7 @@ bool RegProblemSolverLM::solve_numerical()
     if(status == 2 || status == 3)
       break;
   }
-//  LOG(INFO) << "LM Finished ...................";
+  LOG(INFO) << "LM Finished ...................";
   numDiff_regProblemPtr_->setPose();//得到相对pose传到cur_.tr_之中
   lmStatics_.nPoints_ = numDiff_regProblemPtr_->numPoints_;
   lmStatics_.nfev_ = nfev;

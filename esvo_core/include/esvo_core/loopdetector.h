@@ -10,12 +10,17 @@
 #include <opencv2/imgcodecs.hpp>
 #include <ros/ros.h> 
 #include <image_transport/image_transport.h>
+#include <std_msgs/Bool.h>
 #include <dvs_msgs/Event.h>
 #include <dvs_msgs/EventArray.h>
 #include <esvo_core/tools/fsolver.h>
+
 #include <esvo_core/container/CameraSystem.h>
+#include <esvo_core/tools/params_helper.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <esvo_core/tools/utils.h>
+#include <esvo_core/tools/fsolver.h>
+
 #include <map>
 #include <mutex>
 
@@ -26,26 +31,25 @@ using namespace esvo_core;
 using namespace tools;
 // class FSolver;
 class dl{
-
 public:
-dl(const ros::NodeHandle& nh,const ros::NodeHandle &nhp  ); 
-virtual ~dl();//shut down publisher
-
+dl(const ros::NodeHandle& nh,const ros::NodeHandle &nhp); 
+~dl();//shut down publisher
 
 private:
 ros::NodeHandle nh_,pnh_;
+
 DBoW3::Vocabulary my_voc_;
 DBoW3::Database my_database_;
 std::string  voc_file;
 DBoW3::BowVector last_bowvec_;
 double maxScore_;
-
+std::ofstream voc_score;
 int close_match;
 
-container::CameraSystem::Ptr camSYSptr_;
+container::CameraSystem::Ptr camSysPtr_;
 std::string calibFile_;
 cv::Mat camera_Matrix_;
-
+bool bkfIns_;
 // cv::Mat m_images_old;
 std::vector<cv::Mat > m_image_descriptors;
 // DBoW3::BowVector last_bowvec_;
@@ -56,11 +60,13 @@ std::map<int,ros::Time > mSudaro_;
 public:
 //void eventCallback(const dvs_msgs::EventArray::ConstPtr &msg);
 void accumulatedEventCallback(const sensor_msgs::ImageConstPtr &msg);//
+void KeyframeInsertionCallback(const std_msgs::BoolConstPtr & msg);
 // void eventsCallback(const cv::Mat &eventMap);
 //subscriber
+
 ros::Subscriber event_sub_;
 ros::Subscriber acumulatedEvents_sub_;
-
+ros::Subscriber KeyFrame_sub_;
 //publiser
 ros::Publisher obs_pub_,pose_pub_;
 image_transport::Publisher image_pub;
@@ -202,10 +208,6 @@ int image_total_length;
 
 tTemporalWindow window_;
 
-// FSolver fsolver_;
-
-
-
 private:
 
 // bool dataTransfer();
@@ -239,11 +241,9 @@ void getMatches_neighratio(
 
 double distance(const cv::Mat &a, const cv::Mat &b);
 
-Eigen::Matrix4d calculateRelativePose(const std::vector<cv::KeyPoint> &kps1,const std::vector <cv::KeyPoint> &kps2 );
+Eigen::Matrix4d calculateRelativePose(const std::vector<cv::KeyPoint> &kps1,const std::vector <cv::KeyPoint> &kps2,const int  &e_id, const int &q_id );
 
 void publishMap(const cv::Mat & image);
-
-// FSolver fsolver_;
 
 };//loop detector loop
 

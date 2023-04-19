@@ -19,6 +19,7 @@ find_package(DBoW3 REQUIRED)
 LIST( APPEND CMAKE_MODULE_PATH /home/zhouyum/tools/g2o/cmake_modules )  
 SET( G2O_ROOT /usr/local/include/g2o )
 find_package(G2O REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS  CXX)
 #IF(G2O_FOUND)
 #	include_directories(${G2O_INLCUDE_DIR})
 #	message("G2O lib is found in "${G2O_INCLDUE_DIR})
@@ -29,7 +30,13 @@ find_package(G2O REQUIRED)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include ${G2O_INCLUDE_DIRS})
+include_directories(${G2O_INCLUDE_DIRS} ${HDF5_INCLUDE_DIR})
+#include_directories(
+        #${rosbag_INCLUDE_DIRS}
+        #${std_msgs_INCLUDE_DIRS}
+#        ${HDF5_INCLUDE_DIR} 
+#)
+
 
 set(HEADERS
   include/esvo_core/core/DepthFusion.h
@@ -55,7 +62,7 @@ set(HEADERS
   include/esvo_core/tools/TicToc.h
   include/esvo_core/tools/sobel.h
   include/esvo_core/tools/cayley.h
-  #include/esvo_core/tools/fsolver.h
+  include/esvo_core/tools/fsolver.h
   include/esvo_core/tools/params_helper.h)
 
 set(SOURCES
@@ -74,11 +81,11 @@ set(SOURCES
   src/container/KeyFrame.cpp
   src/tools/Visualization.cpp
   src/tools/sobel.cpp
-  #src/tools/fsolver.cpp
+  src/tools/fsolver.cpp
   src/tools/cayley.cpp)
 
 cs_add_library(${PROJECT_NAME}_LIB ${SOURCES} ${HEADERS})
-target_link_libraries(${PROJECT_NAME}_LIB g2o_core g2o_solver_csparse g2o_stuff g2o_types_slam3d g2o_types_sba  g2o_csparse_extension )
+target_link_libraries(${PROJECT_NAME}_LIB g2o_core g2o_solver_csparse g2o_stuff g2o_types_slam3d g2o_types_sba g2o_types_icp g2o_csparse_extension )
 
  
 # Node esvo_Mapping
@@ -106,3 +113,15 @@ cs_add_executable(esvo_MVStereo
     include/esvo_core/esvo_MVStereo.h)
 target_link_libraries(esvo_MVStereo ${PROJECT_NAME}_LIB
     ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} yaml-cpp)
+# NOde event_provider for TUM_VIE
+cs_add_executable(esvo_eventProvider
+    src/EventProvider.cpp
+    src/EventProviderNode.cpp    
+    include/esvo_core/EventProvider.h)
+target_link_libraries(esvo_eventProvider ${PROJECT_NAME}_LIB
+    ${catkin_LIBRARIES} 
+    ${HDF5_CXX_LIBRARIES}
+    #${rosbag_LIBRARIES}
+    #${std_msgs_LIBRARIES} 
+    yaml-cpp)
+

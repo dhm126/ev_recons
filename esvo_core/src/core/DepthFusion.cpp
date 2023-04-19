@@ -37,7 +37,7 @@ DepthFusion::propagate_one_point(
   dp_prop.update_x(x_prop);
 
   // compute the new inverse depth 在变幻后的深度分布
-  double invDepth = 1.0 / p_prop(2);//1/z
+  double invDepth = 1.0 / p_prop(2);//1/z'
 
   // compute the jacobian
   double denominator = T_prop_prior.block<1,2>(2,0) * dp_prior.p_cam().head(2) + T_prop_prior(2, 3);//1x2 x 2x1 +(row,col)
@@ -235,7 +235,9 @@ DepthFusion::studentTCompatibleTest(
     return true;
   return false;
 }
-
+/**
+ * @brief propagate DepthPoints into depthframe 
+*/
 void
 DepthFusion::naive_propagation(
   std::vector<DepthPoint> &dp_obs,
@@ -292,7 +294,10 @@ DepthFusion::naive_propagation(
     }
   }
 }
-
+/** @return if a DepthPoint can be propagated into a common frame  
+    @param dp_prior original 3d Point
+    @param dp_prop propagated 3d Point  
+*/
 bool
 DepthFusion::naive_propagate_one_point(
   DepthPoint &dp_prior,

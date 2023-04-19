@@ -7,6 +7,7 @@
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 #include <g2o/types/sim3/types_seven_dof_expmap.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
+#include <g2o/types/icp/types_icp.h>
 
 #include <deque>
 #include <vector>
@@ -35,12 +36,14 @@ private:
     double fx_,fy_,cx_,cy_;
     
  public:
+    void localBA( KeyFrame & kf);
     void BundleAdjustment(const std::deque <KeyFrame> &vkf);
     void POptimization( std::deque<KeyFrame*> pvkf,std::vector< DepthPoint*> vdps);
-    void resultLog(g2o::SparseOptimizer  &optimizor,const std::deque<KeyFrame> &vkf,bool chech);
+    void resultLog(g2o::SparseOptimizer  &optimizor,const std::deque<KeyFrame> &vkf,bool chech,std::string  ame);
     g2o::SE3Quat convert2SE3Quart(const Eigen::Matrix4d & T_c_w);
     void banbenvdp(std::deque<KeyFrame> &vkf);
-    
+    void ggICP(std::vector<KeyFrame> & kfs);
+    void getCovConnections(std::deque<KeyFrame> & vkf);
     
 };
 //global parameters for optimzization 

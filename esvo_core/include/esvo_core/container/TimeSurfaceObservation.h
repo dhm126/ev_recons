@@ -119,6 +119,9 @@ struct TimeSurfaceObservation
   {
     Eigen::MatrixXd ceilMat(TS_left_.rows(), TS_left_.cols());
     ceilMat.setConstant(255.0);//0
+    cv::Size rc=cv::Size(TS_left_.rows(),TS_left_.cols());
+    cv::Mat time_surface_nega=cv::Mat(rc,CV_8UC1,0.);
+
     if (kernelSize > 0)
     {
       cv::Mat mat_left_;
@@ -126,11 +129,14 @@ struct TimeSurfaceObservation
                        cv::Size(kernelSize, kernelSize), 0.0);
       cv::cv2eigen(mat_left_, TS_blurred_left_);
       TS_negative_left_ = ceilMat - TS_blurred_left_;//0-Ts_blured
+    
+      cv::eigen2cv(TS_negative_left_,time_surface_nega);
     }
     else
     {
       TS_negative_left_ = ceilMat - TS_left_;
     }
+    // cv::imwrite("/tmp/time_surface_nega.png",time_surface_nega);
   }
 
   inline void computeTsNegativeGrad()//利用sobel求ts_flipped_left dx dy 方向梯度

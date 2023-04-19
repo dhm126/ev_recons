@@ -3,7 +3,7 @@
 
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
-
+#include <std_msgs/Bool.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/exact_time.h>
@@ -73,7 +73,11 @@ class esvo_Mapping
   bool needKeyFrame();
 
   void runPGoptimization();
+  // void gaoxiangICP(const std::vector<Eigen::Vector3d> & pts1,
+  //                   const std::vector<Eigen::Vector3d> &pts2,
+  //                   Eigen::Matrix3d & R,Eigen::Vector3d & t);
 
+  
   /*** publish results ***/
   void publishMappingResults(
     DepthMap::Ptr depthMapPtr,
@@ -88,7 +92,8 @@ class esvo_Mapping
     const ros::Time & t,
     image_transport::Publisher & pub,
     std::string encoding = "bgr8");
-
+  
+  void publishKeyframeIns(bool bins);
   /*** event processing ***/
   void createEdgeMask(
     std::vector<dvs_msgs::Event *>& vEventsPtr,
@@ -120,9 +125,10 @@ class esvo_Mapping
 
   // Publishers
   ros::Publisher pc_pub_, gpc_pub_;
+  ros::Publisher mp_events_pub_;
   image_transport::ImageTransport it_;
   double t_last_pub_pc_;
-
+  ros::Publisher kfins_pub_;
   // Time-Surface sync policy
   typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image> ExactSyncPolicy;
   message_filters::Synchronizer<ExactSyncPolicy> TS_sync_;
@@ -235,9 +241,10 @@ class esvo_Mapping
   /******************** For test & debug ********************/
   /**********************************************************/
   image_transport::Publisher invDepthMap_pub_, stdVarMap_pub_, ageMap_pub_, costMap_pub_;
+  image_transport::Publisher DepthMap_pub_;
   size_t old_id=0;
   size_t cur_id;  
-
+  
   Eigen::Matrix4d tcw_,last_tcw_;
   // For counting the total number of fusion
   size_t TotalNumFusion_;

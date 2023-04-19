@@ -19,7 +19,7 @@
 #include <utility>
 
 //#define ESVO_CORE_MAPPING_DEBUG
-// #define ESVO_CORE_MAPPING_LOG
+//  #define ESVO_CORE_MAPPING_LOG
  #define ESVO_CORE_LOOPCLOSING_LOG
 namespace esvo_core
 {
@@ -80,6 +80,7 @@ esvo_Mapping::esvo_Mapping(
   bDenoising_          = tools::param(pnh_, "Denoising", false);
   bRegularization_     = tools::param(pnh_, "Regularization", false);
   resetButton_         = tools::param(pnh_, "ResetButton", false);
+  bInsertKeyframe_     = tools::param(pnh_, "insertKeyframe",true);
   // visualization parameters
   bVisualizeGlobalPC_ = tools::param(pnh_, "bVisualizeGlobalPC", false);
   visualizeGPC_interval_ = tools::param(pnh_, "visualizeGPC_interval", 3);
@@ -137,7 +138,7 @@ esvo_Mapping::esvo_Mapping(
   events_right_sub_ = nh_.subscribe<dvs_msgs::EventArray>("events_right", 0, boost::bind(&esvo_Mapping::eventsCallback, this, _1, boost::ref(events_right_)));
   stampedPose_sub_  = nh_.subscribe("stamped_pose", 0, &esvo_Mapping::stampedPoseCallback, this);
   loopPose_sub_ = nh_.subscribe("/loop_closing/pose_pub", 0, &esvo_Mapping::loopResultCallback, this);
-
+  
   TS_sync_.registerCallback(boost::bind(&esvo_Mapping::timeSurfaceCallback, this, _1, _2));
   // TF
   tf_ = std::make_shared<tf::Transformer>(true, ros::Duration(100.0));
@@ -147,7 +148,10 @@ esvo_Mapping::esvo_Mapping(
   stdVarMap_pub_ = it_.advertise("Standard_Variance_Map", 1);
   ageMap_pub_ = it_.advertise("Age_Map", 1);
   costMap_pub_ = it_.advertise("cost_map", 1);
+  DepthMap_pub_=it_.advertise("DepthMap",1);
   pc_pub_ = nh_.advertise<PointCloud>("/esvo_mapping/pointcloud_local", 1);
+  kfins_pub_=nh_.advertise<std_msgs::Bool>("/KeyFrameIns",1);
+  mp_events_pub_= nh_.advertise<dvs_msgs::EventArray>("/mp_events",1);
   if(bVisualizeGlobalPC_)
   {
     gpc_pub_ = nh_.advertise<PointCloud>("/esvo_mapping/pointcloud_global", 1);
@@ -170,7 +174,7 @@ esvo_Mapping::esvo_Mapping(
   server_->setCallback(dynamic_reconfigure_callback_);
 
   // T_world_cur_.setIdentity();
-  bInsertKeyframe_=true;
+  
   bLoop_over_=false;
   bDoubleInsert_=false;
 }
@@ -189,9 +193,10 @@ void esvo_Mapping::MappingLoop(
   std::future<void> future_reset)
 {
   ros::Rate r(mapping_rate_hz_);
-
+  
   while (ros::ok())
   {
+    
     // reset mapping rate
     if(changed_frame_rate_)
     {
@@ -200,7 +205,7 @@ void esvo_Mapping::MappingLoop(
     }
     // check system status
     nh_.getParam("/ESVO_SYSTEM_STATUS", ESVO_System_Status_);
-    //    LOG(INFO) << "SYSTEM STATUS (MappingLoop): " << ESVO_System_Status_;
+    // LOG(INFO) << "SYSTEM STATUS (MappingLoop): " << ESVO_System_Status_ <<"\n";
     if(ESVO_System_Status_ == "TERMINATE")
     {
       LOG(INFO) << "The Mapping node is terminated manually...";
@@ -250,54 +255,45 @@ void esvo_Mapping::MappingLoop(
         else
           LOG(INFO) << "Initialization fails once.";
       }
-      // Do mapping
-      if(ESVO_System_Status_ == "WORKING"){
+      // Do mapping //upenn_out_door_night 有一个bug
+    
+       if(ESVO_System_Status_ == "WORKING"){
         
     	  if(needKeyFrame() && bInsertKeyframe_) {
-          // static int taitu;
-          
           KeyFrame kf(TS_obs_.second.tr_.getTransformationMatrix());
-          kf.curTsFrame_=TS_obs_.second.cvImagePtr_left_->image;
-          // if(!last_kf_time_.isZero()||!last_kf_tcw.isZero())
-          // velo_=(kf.kfT_w_c.block<3,1>(0,3).norm()-last_kf_tcw.block<3,1>(0,3).norm())/(kf.ts_-last_kf_time_).toSec();
           
-          // last_kf_time_=kf.ts_;
-          // last_kf_tcw=kf.kfT_w_c;
           dkfs_.push_back(kf);
           bInsertion_.push_back(false);
+          publishKeyframeIns(true);
           ROS_INFO("INSERT KEYfRAME -------------\n");
-
         }
         
         MappingAtTime(TS_obs_.first);
-        // std::cout<<"loop size"<<mPose_lc_.size()<<"\t";
-        if(mPose_lc_.size()>6 && !bLoop_over_)
+        
+        if(bInsertKeyframe_ && mPose_lc_.size() && !bLoop_over_)
         {
-            //std::lock_guard<std::mutex> lock(data_mutex_);
-            
             //  todo::calc SE3
             ros::Time t_inj=mPose_lc_.rbegin()->first;
-            
+            cout<<"loop candidate frame size()=="<<mPose_lc_.size()<<"\n";
             auto pos_inj=dkfs_.begin();//positon lc 
-            
+            cout<<"dque of keyFrame size =="<<dkfs_.size()<<endl;
             for(int i=0;i<dkfs_.size();++i){
             if(dkfs_[i].ts_<t_inj )              
               pos_inj++;
             }
             double t_diff= std::fabs(t_inj.toSec()-pos_inj->ts_.toSec());
-#ifdef ESVO_CORE_LOOPCLOSING LOG
+#ifdef ESVO_CORE_LOOPCLOSING_LOG
             std::cout<<"time gap between lc and cur="<<t_diff<<std::endl;
             std::cout<<pos_inj->ts_.toNSec()<<std::endl;
 #endif
-            if( t_diff>0.5 ) {
+            if( t_diff>1.0 ) {
               // ROS_ERROR("too large the time gap is ,cannot calc relative pose !"); 
             }
             else
             {
               //tlc transform match to query 
               Eigen::Matrix4d T_cur=TS_obs_.second.tr_.getTransformationMatrix();
-              Eigen::Matrix4d  T_lc=mPose_lc_.rbegin()->second.inverse();
-
+              Eigen::Matrix4d  T_lc=mPose_lc_.rbegin()->second;
               double slc=(T_cur.topRightCorner<3,1>()-pos_inj->kfT_w_c.topRightCorner<3,1>()).norm();
               // auto it_ax=dkfs_.end()-1;
               // Eigen::Matrix4d  T_b21=it_ax->kfT_w_c;
@@ -307,11 +303,13 @@ void esvo_Mapping::MappingLoop(
               std::cout<<"what should be here=="<<T_cur<<std::endl;
               std::cout<<"relative scale =="<<slc<<std::endl;
 #endif
-              T_lc.block<3,1>(0,3) *=slc*0.02; // nu scale of SE3 calculated 
+              T_lc.block<3,1>(0,3) *=slc*0.006; // nu scale of SE3 calculated 
               
               KeyFrame kf_lc(T_lc);
               kf_lc.curTsFrame_=TS_obs_.second.cvImagePtr_left_->image;
-              kf_lc.kfT_w_c  = pos_inj->kfT_w_c * kf_lc.kfT_w_c;
+              
+              // kf_lc.kfT_w_c  =pos_inj->kfT_w_c * kf_lc.kfT_w_c;// 左乘
+              kf_lc.kfT_w_c  =T_cur;//如果漂移过大得用这个结果
 #ifdef ESVO_CORE_LOOPCLOSING_LOG              
               std::cout<<"time for inqusition in "<<TS_obs_.first.toNSec()<<std::endl;
               std::cout<<"difference between two injiection and current "<<kf_lc.kfT_w_c.topRightCorner<3,1>().norm()-TS_obs_.second.tr_.getTransformationMatrix().topRightCorner<3,1>().norm()<<std::endl;
@@ -323,8 +321,6 @@ void esvo_Mapping::MappingLoop(
               //   continue;
               // }
               // else
-              
-              
               
               for (int j=0;j<pos_inj->kfvdp_.size();j++){
               //back to camera frame Rt*(p-t)
@@ -338,29 +334,28 @@ void esvo_Mapping::MappingLoop(
 
               }
               dkfs_.push_back(kf_lc);
-
-              // std::cout<<"inserted keyframe number is "<<dkfs_.back().kfid_<<"wwww"<<kf_lc.vkfdps_.empty()<<std::endl;
-              ESVO_System_Status_="LOOPCLOSING";
               
+              // std::cout<<"inserted keyframe number is "<<dkfs_.back().kfid_<<"wwww"<<kf_lc.vkfdps_.empty()<<std::endl;
+              
+              ESVO_System_Status_="LOOPCLOSING";
+              nh_.setParam("/ESVO_SYSTEM_STATUS",ESVO_System_Status_);
             }
         }
-
-        
 	    }
-
-      if(ESVO_System_Status_=="LOOPCLOSING"){
-     	  //r.sleep();
+      
+       if(ESVO_System_Status_=="LOOPCLOSING")
+      {
         bInsertKeyframe_=false;
         bLoop_over_=true;
 
-        ROS_INFO("---------start looclosing thread-----------");
-        
+        ROS_INFO("\n \n -----start looclosing thread------\n \n ");
         std::thread loop(&esvo_Mapping::runPGoptimization,this);
         loop.detach();
         ESVO_System_Status_="WORKING";
+        nh_.setParam("/ESVO_SYSTEM_STATUS",ESVO_System_Status_);
       }
     }
-    else //haven't receive timesurface 
+    else //haven't receive timesurface TShistory.size() <10
     {
       if(future_reset.wait_for(std::chrono::nanoseconds(1)) == std::future_status::ready)
       {
@@ -368,7 +363,7 @@ void esvo_Mapping::MappingLoop(
         return;
       }
     }
-    r.sleep();
+    r.sleep();//跳过这回和
   }
 }
 
@@ -449,6 +444,11 @@ void esvo_Mapping::MappingAtTime(const ros::Time& t)
 //culling depth point  due to setted threshold
   dpSolver_.pointCulling(vdp, stdVar_vis_threshold_, cost_vis_threshold_,
                          invDepth_min_range_, invDepth_max_range_);//筛选
+  //Keyframe insert depthPoints without depth fusion 
+  // if(!dkfs_.empty()){
+  //     dkfs_.back().kfvdp_=vdp;
+  // }
+  
 #ifdef ESVO_CORE_MAPPING_DEBUG
     LOG(INFO) << "After culling, vdp.size: " << vdp.size();
 #endif
@@ -469,7 +469,7 @@ void esvo_Mapping::MappingAtTime(const ros::Time& t)
       for(size_t n = 0; n < dqvDepthPoints_.size(); n++)
         numFusionPoints += dqvDepthPoints_[n].size();
     }
-  }//原来是这样 const frame 就是这点的observation的共视帧 但由于TS采样过于密集(100hz)这样的共视帧并没有什么用
+  }// const frame 就是这点的observation的共视帧 但由于TS采样过于密集(100hz)这样的共视帧并没有什么用
   else if(FusionStrategy_ == "CONST_FRAMES") // (strategy 2: const number of frames)
   {
     tt_mapping.tic();
@@ -515,9 +515,7 @@ void esvo_Mapping::MappingAtTime(const ros::Time& t)
   // count time
   t_optimization = t_solve + t_fusion + t_regularization;
   t_overall_count += t_optimization;
-  
-
-
+  /*关键帧中插入深度点 v0.1 */
   for (int i=0;i<depthFramePtr_->dMap_->rows();i++){
     for (int j=0;j<depthFramePtr_->dMap_->cols();j++){
       if(depthFramePtr_->dMap_->exists(i,j)){ 
@@ -528,43 +526,23 @@ void esvo_Mapping::MappingAtTime(const ros::Time& t)
           {
             // DepthPoint *dp_cure= new DepthPoint(depthFramePtr_->dMap_->get(i,j));
             DepthPoint dp_cur=depthFramePtr_->dMap_->get(i,j);
-            // Eigen::Matrix4d trans_l=TS_obs_.second.tr_.getTransformationMatrix();
-            // dp_cure->updatePose(trans_l);
-          
-            // dp_cure->update_p_world();
-            // Eigen::Vector3d p_worldcur=dp_cure->p_world();
-
+            // dp_cur.invDepth();
+            // try{
+            //  // DepthMap.at<float>(i,j)=1/dp_cur.invDepth();
+            // }catch(cv::Exception & e ){std::cerr<<e.what()<<"\n";}
             
-            // for(std::deque<KeyFrame>::const_iterator it_befin=dkfs_.begin();it_befin!=dkfs_.end();it_befin++)
-            // {
-            // Eigen::Vector3d p_ob=it_befin->kfT_w_c.block<3,3>(0,0).transpose() * p_worldcur
-            //                       - it_befin->kfT_w_c.block<3,1>(0,3);
-            // Eigen::Vector2d x_ob;
-            // camSysPtr_->cam_left_ptr_->world2Cam(p_ob,x_ob);
-             
-            // if(x_ob.x()>0&&x_ob.y()>0&&x_ob.x()<camSysPtr_->cam_left_ptr_->width_&&p_ob.y()<camSysPtr_->cam_left_ptr_->height_)
-            //   dkfs_.back().nieba_[dp_cure].push_back(it_befin->kfid_);
-             
-            // }
-
             dkfs_.back().kfvdp_.push_back(dp_cur);
-            // delete dp_cure;
           } 
       }
       }
     }
   }
-//observation =0
-  // if(dkfs_.back().nieba_.empty())
-  // {
-  // bDoubleInsert_=true;
-  // ROS_INFO("has bad observation for current dps ,need a new one");
-  // dkfs_.pop_back();
-  // }
-
+  // publishImage(DepthMap,t,DepthMap_pub_,"mono8");
+  // if(!dkfs_.empty()&&!bInsertion_.back())
+  //  op_.localBA(dkfs_.back());
+  if(!bInsertion_.empty())
   bInsertion_.back()= true ;
   
-
   // publish results
   std::thread tPublishMappingResult(&esvo_Mapping::publishMappingResults, this,
                                     depthFramePtr_->dMap_, depthFramePtr_->T_world_frame_, t);
@@ -623,6 +601,7 @@ bool esvo_Mapping::InitializationAtTime(const ros::Time &t)//仅对当前时间�
   // Apply logical "AND" operation and transfer "disparity" to "invDepth".
   std::vector<DepthPoint> vdp_sgm;
   vdp_sgm.reserve(vEdgeletCoordinates.size());
+  // LOG(INFO)<<"sgm get coordinates size = "<<vEdgeletCoordinates.size();
   double var_SGM = pow(0.001,2);
   for(size_t i = 0; i < vEdgeletCoordinates.size(); i++)
   {
@@ -635,7 +614,9 @@ bool esvo_Mapping::InitializationAtTime(const ros::Time &t)//仅对当前时间�
     DepthPoint dp(x,y);
     Eigen::Vector2d p_img(x*1.0,y*1.0);
     dp.update_x(p_img);
+    
     double invDepth = disp / (camSysPtr_->cam_left_ptr_->P_(0,0) * camSysPtr_->baseline_);// inv =disp/投影矩陣P*基线长度
+    //LOG(INFO)<<"get current invdepth=="<<invDepth<<std::endl;
     if(invDepth < invDepth_min_range_ || invDepth > invDepth_max_range_)
       continue;
     Eigen::Vector3d p_cam;
@@ -649,12 +630,12 @@ bool esvo_Mapping::InitializationAtTime(const ros::Time &t)//仅对当前时间�
     vdp_sgm.push_back(dp);
   }
   LOG(INFO) << "********** Initialization (SGM) returns " << vdp_sgm.size() << " points.";
-  if(vdp_sgm.size() < INIT_SGM_DP_NUM_Threshold_)
+  if(vdp_sgm.size() < INIT_SGM_DP_NUM_Threshold_) // 500 points 
     return false;
   // push the "masked" SGM results to the depthFrame
   dqvDepthPoints_.push_back(vdp_sgm);
-
   dFusor_.naive_propagation(vdp_sgm, depthFramePtr_);
+  
   // publish the invDepth map
   std::thread tPublishMappingResult(&esvo_Mapping::publishMappingResults, this,
                                     depthFramePtr_->dMap_, depthFramePtr_->T_world_frame_, t);
@@ -774,6 +755,7 @@ bool esvo_Mapping::dataTransferring()//load events  tr
     LOG(INFO) << "Data Transferring (stampTransformation map): " << st_map_.size();
 #endif
   }
+  
   return true;
 }
 
@@ -782,7 +764,7 @@ void esvo_Mapping::stampedPoseCallback(
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
   // To check inconsistent timestamps and reset.
-  static constexpr double max_time_diff_before_reset_s = 0.5;
+  static constexpr double max_time_diff_before_reset_s = 1.5;
   const ros::Time stamp_first_event = ps_msg->header.stamp;
 
   std::string *err_tf = new std::string();
@@ -831,7 +813,7 @@ void esvo_Mapping::loopResultCallback(const geometry_msgs::PoseStampedConstPtr &
 
   mPose_lc_.insert(std::make_pair(t_lc_saki,Tcw_lc)); 
   
-  // std::cout<<"get pose at loopclosing ==="<<mPose_lc_.size()<<std::endl;
+  std::cout<<"get pose at loopclosing ==="<<mPose_lc_.size()<<std::endl;
 }
 
 // return the pose of the left event cam at time t.
@@ -973,10 +955,10 @@ void esvo_Mapping::reset()
   TS_id_ = 0;
   depthFramePtr_->clear();
   dqvDepthPoints_.clear();
-
+  dkfs_.clear();
   ebm_.resetParameters(BM_patch_size_X_, BM_patch_size_Y_,
                        BM_min_disparity_, BM_max_disparity_, BM_step_, BM_ZNCC_Threshold_, BM_bUpDownConfiguration_);
-  bInsertKeyframe_=true;
+
   bLoop_over_=false;
 
   for(int i = 0;i < 2;i++)
@@ -1267,31 +1249,26 @@ void esvo_Mapping::extractDenoisedEvents(
 }
 bool esvo_Mapping::needKeyFrame(){
 
-  static size_t maxInterval=40;
+  static size_t maxInterval=20;
   cur_id=TS_obs_.second.id_;
   if(bDoubleInsert_)
     {
       bDoubleInsert_=false;
       return true;
     }
-
-  // if((tcw_.topRightCorner<3,1>()-last_tcw_.topRightCorner<3,1>()).norm()<0.03)
-  //   {
-  //     ROS_INFO("in nearly not moving");
-  //     last_tcw_=tcw_;  
-  //     return true;
-  //   }
-
   if (!((cur_id-old_id) > maxInterval)) return false ;
   else  {
     old_id=cur_id;
-    
-    //else if (cur_id/old_id >1.12) return true;
     return true;
     }            
 
 return false ;
+}
 
+void esvo_Mapping::publishKeyframeIns(bool sts){
+  std_msgs::BoolPtr nsgs(new std_msgs::Bool());
+  nsgs->data=sts;
+  kfins_pub_.publish(nsgs);
 }
 void esvo_Mapping::runPGoptimization(){
   { 
@@ -1309,25 +1286,40 @@ void esvo_Mapping::runPGoptimization(){
           for(int i=0;i<it_begin->kfvdp_.size();i++)
           {
             auto it_befin=dkfs_.begin();
-
+            //avoid some strange circonstance which t_dp diag ==0
             if(std::fabs(it_begin->kfvdp_[i].T_world_cam().block<3,3>(0,0).trace())<0.01) 
             it_begin->kfvdp_[i].updatePose(it_begin->kfT_w_c);
-
+            //calculate p_world
             it_begin->kfvdp_[i].update_p_world();
             
-            //p_world
-            Eigen::Vector3d p_worldcur=it_begin->kfvdp_[i].p_world();
+            //p_world 当前关键帧的每个深度点
+            Eigen::Vector3d p_cur_world=it_begin->kfvdp_[i].p_cam();
             //p_back to different world
             for(std::deque<KeyFrame>::const_iterator it_befin=dkfs_.begin();it_befin!=dkfs_.end();it_befin++)
             {
-            Eigen::Vector3d p_ob=it_befin->kfT_w_c.block<3,3>(0,0).transpose() * p_worldcur
-                                  - it_befin->kfT_w_c.block<3,1>(0,3);
+            if( it_befin==it_begin) continue;//it_befin 查找的共识帧 ti_begin 当前帧
+              //取得当前深度点在其余关键帧中的坐标
+              /*
+              it_begin 当前帧的深度点所在坐标 ref 
+              it_befin 投影帧的深度点所在坐标 cov 
+              已知p_ref_world:
+              p_cov_world =T_cov_world * T_world_ref * p_ref_world
+
+              则 p_cov_cam=T_cov_world * T_world_cam * p_cov_world 
+              求得其相对位子为 T_cov_ref=
+              */
+            Eigen::Matrix4d T_cov_ref=it_befin->kfT_w_c.inverse() * it_begin->kfT_w_c ;
+            Eigen::Vector3d p_ob =T_cov_ref.block<3,3>(0,0) * p_cur_world + T_cov_ref.block<3,1>(0,3);
+            // Eigen::Vector3d p_ob=it_befin->kfT_w_c.block<3,3>(0,0).transpose() * (p_ob_world-it_befin->kfT_w_c.block<3,1>(0,3)); 
+            // Eigen::Vector3d p_ob=it_befin->kfT_w_c.block<3,3>(0,0).transpose() * (p_worldcur-
+            //                       it_befin->kfT_w_c.block<3,1>(0,3));//R.t-t 对当前每个关键帧查找是否有 
+            
              //back to cam frame 2d                              
             Eigen::Vector2d x_ob;
             camSysPtr_->cam_left_ptr_->world2Cam(p_ob,x_ob);
-             
+             //检查是否在befin 平面内
              if(x_ob.x()>0&&x_ob.y()>0&&x_ob.x()<camSysPtr_->cam_left_ptr_->width_&&p_ob.y()<camSysPtr_->cam_left_ptr_->height_)
-             {
+             {if(std::fabs(int(it_befin->kfid_-it_begin->kfid_))<=1) 
               it_begin->nieba_[&it_begin->kfvdp_[i]].push_back(it_befin->kfid_);
              }else outOfBound ++;
             
@@ -1338,20 +1330,29 @@ void esvo_Mapping::runPGoptimization(){
           std::cout<<"check numbers "<<it_begin->kfid_<<"\n";
           std::cout<<"relativepose== \n "<<it_begin->kfT_w_c<<std::endl;
           std::cout<<"vdp.size()=="<<it_begin->kfvdp_.size()<<std::endl;
-          //  it_begin->ImageLog();
-          std::cout<<"check timestamp of each keyframe "<<it_begin->ts_.toNSec()<<std::endl;
+          
+          // std::cout<<"check timestamp of each keyframe "<<it_begin->ts_.toNSec()<<std::endl;
+          // for(auto coit=it_begin->nieba_.begin();coit!=it_begin->nieba_.end();coit++)
+          // {
+          //   // std::cout<<"covisibility size = "<<coit->second.size()<<"\n";
+          //   for(auto nit=coit->second.begin();nit!=coit->second.end();nit++)
+          //     std::cout<<*nit<<" ";
+          // std::cout<<"\n";  
+          // }
+          
+          std::cout<<"\n";
           std::cout<<"observation size=="<<it_begin->nieba_.size()<<std::endl;
 #endif
           it_begin++;
         }
       }
       
-        // ROS_ERROR("we are simulating bundleAdjustment");
+        //ROS_ERROR("we are simulating bundleAdjustment");
         //find tcw of last frame   
-        // op_.POptimization(optest);
+        
         op_.banbenvdp(dkfs_);
-        // op_.BundleAdjustment(dkfs_);
+        //  op_.BundleAdjustment(dkfs_);
       }
-  }
-
+}
+//
 }// esvo_core

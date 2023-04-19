@@ -7,8 +7,8 @@
 
 
 
-//#define ESVO_CORE_TRACKING_DEBUG
-//#define ESVO_CORE_TRACKING_LOG
+// #define ESVO_CORE_TRACKING_DEBUG
+// #define ESVO_CORE_TRACKING_LOG
 namespace esvo_core
 {
 esvo_Tracking::esvo_Tracking(
@@ -68,8 +68,7 @@ esvo_Tracking::esvo_Tracking(
 
   /*** Tracker ***/
   T_world_cur_ = Eigen::Matrix<double,4,4>::Identity();
-//   wocao_= std::make_shared<KeyFrame>();
-  
+
   
   std::thread TrackingThread(&esvo_Tracking::TrackingLoop, this);
   TrackingThread.detach();
@@ -104,7 +103,7 @@ void esvo_Tracking::TrackingLoop()
       LOG(INFO) << "The tracking node is terminated manually...";
       break;
     }
-
+    
     // Data Transfer (If mapping node had published refPC.)
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
@@ -123,11 +122,8 @@ void esvo_Tracking::TrackingLoop()
       else
         continue;
     
-    // optimizer_.updateKf(ref_.vPointXYZPtr_,ref_.tr_,cur_.pTsObs_->id_,ref_.t_,kfi);
-    // vkfs.push_back(kfi);
     }
-   // std::cout<<wocao_->kfid_<<std::endl;
-     // std::shared_ptr vpkfs
+		
     // create new regProblem
     TicToc tt;
     double t_resetRegProblem, t_solve, t_pub_result, t_pub_gt;
@@ -152,7 +148,7 @@ void esvo_Tracking::TrackingLoop()
       t_solve = tt.toc();
       tt.tic();
 #endif
-
+    
       T_world_cur_ = cur_.tr_.getTransformationMatrix();//update trans (pose,path)
       
       
@@ -260,8 +256,9 @@ esvo_Tracking::curDataTransferring()
   if(cur_.t_ == TS_it->first)//ts一直==cur时代表未曾data trans
     return false;
   cur_.t_ = TS_it->first;//ros::time
+  
   cur_.pTsObs_ = &TS_it->second;//time surface obversation
-  // std::cout<<"current id =="<<cur_.pTsObs_->id_<<std::endl;
+  
   nh_.getParam("/ESVO_SYSTEM_STATUS", ESVO_System_Status_);
   if(ESVO_System_Status_ == "INITIALIZATION" && ets_ == IDLE)
   {
@@ -277,6 +274,7 @@ esvo_Tracking::curDataTransferring()
   // Count the number of events occuring since the last observation.
   auto ev_cur_it = EventBuffer_lower_bound(events_left_, cur_.t_);
   cur_.numEventsSinceLastObs_ = std::distance(ev_last_it, ev_cur_it) + 1;
+  
   return true;
 }
 
@@ -286,6 +284,7 @@ void esvo_Tracking::reset()
   ets_ = IDLE;
   TS_id_ = 0;
   TS_history_.clear();
+  
   refPCMap_.clear();
   events_left_.clear();
 }

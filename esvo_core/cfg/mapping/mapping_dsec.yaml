@@ -9,6 +9,7 @@ FUSION_STRATEGY: CONST_FRAMES #"CONST_POINTS" # "CONST_FRAMES"
 maxNumFusionFrames: 5 #40
 maxNumFusionPoints: 20000 #8000 #3000
 Denoising: False
+insertKeyframe: False
 SmoothTimeSurface: True #False
 Regularization: True
 bVisualizeGlobalPC: True

@@ -1,5 +1,5 @@
 #include <esvo_core/core/DepthProblemSolver.h>
-
+#include <iostream>
 #include <thread>
 #include <functional>
 #include <fstream>
@@ -127,9 +127,9 @@ void DepthProblemSolver::solve_multiple_problems(Job & job)
       }
       else
         exit(-1);
-
-      dp.residual() = result[2];
-      dp.updatePose(T_world_virtual);//dp只记下当前相机坐标系
+      // std::cout<<sqrt(result[2])<<"\n";
+      dp.residual() = result[2];//variance 
+      dp.updatePose(T_world_virtual);//dp只记下当前中心相机坐标系 相对左目和右目的中间坐标
       job.vdpPtr_->push_back(dp);
     }
   }
@@ -199,17 +199,18 @@ bool DepthProblemSolver::solve_single_problem_numerical(
   Eigen::internal::covar(lm.fjac, lm.permutation.indices());
   if(dpConfigPtr_->LSnorm_ == "l2")
   {
-    double fnorm = lm.fvec.blueNorm();
-    double covfac = fnorm * fnorm / (dProblemPtr->values() - dProblemPtr->inputs());
+    double fnorm = lm.fvec.blueNorm();//L2 Norm
+    double covfac = fnorm * fnorm / (dProblemPtr->values() - dProblemPtr->inputs());//看不懂这是什么
     Eigen::MatrixXd cov = covfac * lm.fjac.topLeftCorner<1,1>();
     result[1] = cov(0,0);
   }
   if(dpConfigPtr_->LSnorm_ == "Tdist")
   {
-    Eigen::MatrixXd invSumJtT = lm.fjac.topLeftCorner<1,1>();
+    Eigen::MatrixXd invSumJtT = lm.fjac.topLeftCorner<1,1>();//2x2 include 2d coordinate
     result[1] = std::pow(dpConfigPtr_->td_stdvar_,2) * invSumJtT(0,0);//var
   }
-  result[2] = lm.fnorm * lm.fnorm;//residual
+  // std::cout<<lm.fnorm<<"\t";
+  result[2] = lm.fnorm * lm.fnorm;//variance
   return true;
 }
 //筛选在范围内的Vdepthpoint

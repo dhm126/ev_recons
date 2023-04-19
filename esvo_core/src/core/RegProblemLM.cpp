@@ -19,6 +19,7 @@ RegProblemLM::RegProblemLM(
 {
   patchSize_ = rpConfigPtr_->patchSize_X_ * rpConfigPtr_->patchSize_Y_;
   computeJ_G(Eigen::Matrix<double,6,1>::Zero(), J_G_0_);//JG0 12x6 为了提高精度提前计算雅各比
+  LOG(INFO)<<"J_G_0 \n "<<J_G_0_<<"\n";
 }
 
 void RegProblemLM::setProblem(RefFrame* ref, CurFrame* cur, bool bComputeGrad)
@@ -41,7 +42,7 @@ void RegProblemLM::setProblem(RefFrame* ref, CurFrame* cur, bool bComputeGrad)
   ResItems_.resize(numPoints_);
   if(bPrint_)
     LOG(INFO) << "num points: " << numPoints_;
-
+    
   for(size_t i = 0; i < numPoints_; i++)
   {
     bool bStochasticSampling = true;
@@ -50,7 +51,8 @@ void RegProblemLM::setProblem(RefFrame* ref, CurFrame* cur, bool bComputeGrad)
     Eigen::Vector3d p_tmp((double) ref->vPointXYZPtr_[i]->x,
                           (double) ref->vPointXYZPtr_[i]->y,
                           (double) ref->vPointXYZPtr_[i]->z);
-    Eigen::Vector3d p_cam = R_world_ref.transpose() * (p_tmp - t_world_ref);//相机坐标系下点云
+    Eigen::Vector3d p_cam = R_world_ref.transpose() * (p_tmp - t_world_ref);//ref相机坐标系下点云
+    
     ResItems_[i].initialize(p_cam(0), p_cam(1), p_cam(2));//, var);p=eigen::vector3d
   }
   // for stochastic sampling
@@ -58,9 +60,76 @@ void RegProblemLM::setProblem(RefFrame* ref, CurFrame* cur, bool bComputeGrad)
 
   // load cur's info
   pTsObs_ = cur->pTsObs_;
+
+  /*Fast detector test for timeSurface
+  */
+  // std::vector<cv::KeyPoint> vfastKps;
+  // size_t rows=cur_->pTsObs_->cvImagePtr_left_->image.rows;
+  // size_t cols=cur_->pTsObs_->cvImagePtr_left_->image.cols;
+  
+  // cv::FAST(cur_->pTsObs_->cvImagePtr_left_->image,vfastKps,6);
+  // std::vector<cv::Point2d> vPoints2d;
+  // size_t minPoints_pnp_assert=std::min(numPoints_,vfastKps.size());
+  // std::vector<cv::Point3d> coors_pnp3d;
+  // for (int i=0;i<minPoints_pnp_assert;i++) 
+  // {
+  //   vPoints2d.push_back(cv::Point2d(vfastKps[i].pt.x,vfastKps[i].pt.y));
+  //   coors_pnp3d.push_back(coors[i]);
+  // }
+  
+  // cv::InputArray pnp2d(vPoints2d);
+  // cv::InputArray pnp3d(coors_pnp3d);
+  
+  // cv::Size size =cv::Size(cols,rows);//x , y
+  // cv::Mat IfastKps=cv::Mat(size,CV_32F,0.);
+
+  // for (int i=0;i<vfastKps.size();i++){
+  //   int coorx=vfastKps[i].pt.x;
+  //   int coory=vfastKps[i].pt.y;
+  //   IfastKps.at<float>(coory,coorx)= 255.0;
+  // }
+
+  
+  
+  // cv::Matx33d cK_;
+  // for(int i=0;i<3;i++){
+  //   for(int j=0;j<3;j++)
+  //     cK_(i,j)=camSysPtr_->cam_left_ptr_->K_(i,j);
+  // }
+  // // LOG(INFO)<<"camera_matrix  in corner points pnp slove problem = "<<cK_<<"\n";
+  // cv::Vec4d dist=cv::Vec4d(camSysPtr_->cam_left_ptr_->D_(0),camSysPtr_->cam_left_ptr_->D_(1),camSysPtr_->cam_left_ptr_->D_(2),camSysPtr_->cam_left_ptr_->D_(3));
+  // cv::Mat Rvec,tvec;
+  
+  // // LOG(INFO)<<"distortion coeficceint   in corner points pnp slove problem = "<<dist<<"\n";
+  // try {
+  // cv::solvePnPRansac(pnp3d,pnp2d,cK_,dist,Rvec,tvec);
+  // cv::Mat R_;
+  // cv::Rodrigues(Rvec,R_);
+  // std::cout<<"\n R \n\n"<<R_<<"\nt\n\n"<<tvec;
+  // }
+  // catch (cv::Exception & e ){
+  //   LOG(INFO)<<"given 3d points "<<coors.size()<<"\n given 2d points "<<vPoints2d.size()<<"\n";
+  //   std::cerr<<e.what()<<"\n";
+  // }
+  // cur_->pTsObs_->cvImagePtr_left_->image=IfastKps;
+  
+  // try{
+  // cv::imwrite("/tmp/image.png",IfastKps);
+  // cv::imwrite("/tmp/points3d.png",canvas3d);
+
+  // }catch (cv::Exception & e ){
+  //   std::cerr<<e.what()<<"\n";
+  // }
+
+  /*fast corner detector test end 
+  */
+  
   pTsObs_->getTimeSurfaceNegative(rpConfigPtr_->kernelSize_);//negtive TS 0-Ts
   if(bComputeGrad)
     pTsObs_->computeTsNegativeGrad();//ts negtive 梯度
+
+    //LOG(INFO)<<"save cur frame to \n";
+    
   // set fval dimension
   resetNumberValues(numPoints_ * patchSize_);//num
   if(bPrint_)
@@ -87,10 +156,11 @@ void RegProblemLM::setStochasticSampling(size_t offset, size_t N)
     LOG(INFO) << "ResItemsStochSampled_.size: " << ResItemsStochSampled_.size();
   }
 }
-//compute x to jG0
+//compute x to jG0 在optimizer的functor里面 
 int RegProblemLM::operator()(const Eigen::Matrix<double,6,1>& x, Eigen::VectorXd& fvec) const
 {
   // calculate the warping transformation (T_cur_ref))
+  if(bPrint_) LOG(INFO)<<"start compute LM";
   Eigen::Matrix4d T_warping = Eigen::Matrix4d::Identity();
   getWarpingTransformation(T_warping, x);
 
@@ -131,7 +201,7 @@ int RegProblemLM::operator()(const Eigen::Matrix<double,6,1>& x, Eigen::VectorXd
       fvec[i] = sqrt(irls_weight) * ri.residual_(0);
     }
   }
-//  LOG(INFO) << "assign weighted residual ..............";
+ if(bPrint_) LOG(INFO) << "assign weighted residual "<<"..............";
   return 0;
 }
 //
@@ -144,8 +214,8 @@ RegProblemLM::thread(Job& job ) const
   const Eigen::Matrix4d & T_left_ref = *job.T_left_ref_;
   size_t i_thread = job.i_thread_;
   size_t numPoint = vRI.size();
-  size_t wx = rpConfigPtr_->patchSize_X_;
-  size_t wy = rpConfigPtr_->patchSize_Y_;
+  size_t wx = rpConfigPtr_->patchSize_X_;//1
+  size_t wy = rpConfigPtr_->patchSize_Y_;//1
   size_t residualDim = wx * wy;
 
   // calculate point-wise spatio-temporal residual
@@ -160,7 +230,7 @@ RegProblemLM::thread(Job& job ) const
       ri.residual_.setConstant(255.0);//2d
     else
     {
-      Eigen::MatrixXd tau1;
+      Eigen::MatrixXd tau1;//对投影后的TS做插值
       if(patchInterpolation(TsObs.TS_negative_left_, x1_s, tau1))
       {
         for(size_t y = 0; y < wy; y++)
@@ -178,6 +248,7 @@ RegProblemLM::thread(Job& job ) const
 //由6x1计算jacobian matrxi Function warping 对x 论文中是theta的微分
 int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) const
 {
+  if(bPrint_) LOG(INFO)<<"derivation of functor optimization\n";
   if(x != Eigen::Matrix<double,6,1>::Zero())
   {
     LOG(INFO) << "The Jacobian is not evaluated at Zero !!!!!!!!!!!!!";
@@ -185,7 +256,7 @@ int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) 
   }
   fjac.resize(m_values, 6);
 
-  // J_x = dPi_dT * dT_dInvPi * dInvPi_dx pi=warping transformation
+  // J_x = dPi_dT * dT_dInvPi * dInvPi_dx 
   Eigen::Matrix3d dT_dInvPi = R_.transpose();// Explaination for the transpose() can be found below.3x3
   Eigen::Matrix<double,3,2> dInvPi_dx_constPart;
   dInvPi_dx_constPart.setZero();
@@ -208,7 +279,7 @@ int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) 
   const double P21 = camSysPtr_->cam_left_ptr_->P_(1,0);
   const double P22 = camSysPtr_->cam_left_ptr_->P_(1,1);
   const double P24 = camSysPtr_->cam_left_ptr_->P_(1,3);
-
+  if(bPrint_) LOG(INFO) <<"calcauted  dPi/dT ";
   for(size_t i = 0; i < numPoints_; i++)
   {
     Eigen::Vector2d x1_s;
@@ -218,12 +289,13 @@ int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) 
       fjacBlock.row(i) = Eigen::Matrix<double,1,12>::Zero();
     else
     {
+      if(bPrint_) LOG(INFO)<<x1_s<<"\n";
       // obtain the exact gradient by bilinear interpolation.
       Eigen::MatrixXd gx, gy;
       patchInterpolation(pTsObs_->dTS_negative_du_left_, x1_s, gx);
       patchInterpolation(pTsObs_->dTS_negative_dv_left_, x1_s, gy);
       Eigen::Vector2d grad = Eigen::Vector2d(gx(0,0)/8, gy(0,0)/8);//8 is the normalization factor for 3x3 sobel filter.
-
+      //见SLAM14讲式eq8.13 PI为投影方程、T为三维变化点 这里使用了投影矩阵和原式 略有出入
       Eigen::Matrix<double,2,3> dPi_dT;
       dPi_dT.setZero();
       dPi_dT.block<2,2>(0,0) = camSysPtr_->cam_left_ptr_->P_.block<2,2>(0,0) / ri.p_(2);
@@ -238,12 +310,14 @@ int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) 
       dT_dG.block<3,3>(0,3) = ri.p_(1) * Eigen::Matrix3d::Identity();
       dT_dG.block<3,3>(0,6) = ri.p_(2) * Eigen::Matrix3d::Identity();
       dT_dG.block<3,3>(0,9) = Eigen::Matrix3d::Identity();
-//      LOG(INFO) << "dT_dG:\n" << dT_dG;
+     //if(bPrint_) LOG(INFO) << "dT_dG:\n" << dT_dG;
+//1X2 x 2X3 x 3X2 x 2X3 x 3x 12 x z
       fjacBlock.row(i) = grad.transpose() * dPi_dT * J_constPart * dPi_dT * dT_dG * ri.p_(2);//ri.p_(2) refers to 1/rho_i which is actually coming with dInvPi_dx.
+      if(bPrint_ ) LOG(INFO)<<"fjacBLOCK"<<i<<" \t\t\n";
     }
   }
   // assemble with dG_dtheta
-  fjac = -fjacBlock * J_G_0_;
+  fjac = -fjacBlock * J_G_0_;//1x 12 x 12 x 6 
   // The explanation for the factor -1 is as follows. The transformation recovered from dThetha
   // is T_right_left (R_, t_). However, the one used for warping is T_left_right (R_.transpose(), -R.transpose() * t).
   // Thus, R_.transpose() is used as dT_dInvPi. Besides, J_theta = dPi_dT * dT_dG' * dG'_dG * dG_dtheta. G'(dtheta) recovers
@@ -265,7 +339,7 @@ int RegProblemLM::df(const Eigen::Matrix<double,6,1>& x, Eigen::MatrixXd& fjac) 
   // The linearization is performed around dtheta = 0, thus tx = ty = tz = 0, r_{ii} = 1, r_{ij} = 0.
   // dG'_dG * dG_dtheta = -dG_dtheta. This explains where is "-1" from.
 
-  // LOG(INFO) << "fjac:\n" << fjac;
+  if(bPrint_) LOG(INFO) << "fjac:\n" ;//<< fjac;// 1x 6 caley
   // LOG(INFO) << "Jacobian Computation takes " << tt.toc() << " ms.";
   return 0;
 }
@@ -279,7 +353,9 @@ RegProblemLM::computeJ_G(const Eigen::Matrix<double,6,1>&x, Eigen::Matrix<double
   double c1_sq, c2_sq, c3_sq, k_sq;
   c1 = x(0);c2 = x(1);c3 = x(2);
   c1_sq = pow(c1,2); c2_sq = pow(c2,2); c3_sq = pow(c3,2);
+  //normal k 
   k = 1 + pow(c1,2) + pow(c2,2) + pow(c3,2);
+  //k_sq =k^2
   k_sq = pow(k,2);
   Eigen::Matrix3d A1, A2, A3;
   // A1
@@ -387,10 +463,10 @@ bool RegProblemLM::isValidPatch(
   size_t wx,
   size_t wy) const
 {
-  if (patchCentreCoord(0) < (wx-1)/2 ||
-      patchCentreCoord(0) > camSysPtr_->cam_left_ptr_->width_  - (wx-1)/2 - 1||
-      patchCentreCoord(1) < (wy-1)/2 ||
-      patchCentreCoord(1) > camSysPtr_->cam_left_ptr_->height_ - (wy-1)/2 - 1)
+  if (patchCentreCoord(0) < (wx-1) ||
+      patchCentreCoord(0) > camSysPtr_->cam_left_ptr_->width_  - (wx-1) - 1||
+      patchCentreCoord(1) < (wy-1) ||
+      patchCentreCoord(1) > camSysPtr_->cam_left_ptr_->height_ - (wy-1) - 1)
     return false;
   if(mask(patchCentreCoord(1)-(wy-1)/2, patchCentreCoord(0)-(wx-1)/2) < 125)
     return false;
@@ -418,7 +494,7 @@ bool RegProblemLM::reprojection(
     return false;
   return true;
 }
-//这个函数还有点问题，调用这个函数时location没有定义
+
 //
 bool RegProblemLM::patchInterpolation(
   const Eigen::MatrixXd &img,

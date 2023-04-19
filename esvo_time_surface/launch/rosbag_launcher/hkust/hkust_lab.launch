@@ -2,7 +2,7 @@
   <!-- ROS BAG -->
   <rosparam param="/use_sim_time">true</rosparam>
   <node pkg="rosbag" type="play" name="play" output="screen" required="true"
-    args="/home/zhouyum/bag/hkust_lab.bag -r 0.7 --clock">
+    args="/home/zhouyum/bag/hkust_lab.bag -r 0.5 --clock">
     <!-- MODIFY THE ABOVE DIRECTORY -->
   </node>
 

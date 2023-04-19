@@ -10,6 +10,8 @@
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 
+#include <opencv2/features2d.hpp>
+
 namespace esvo_core
 {
 using namespace container;
